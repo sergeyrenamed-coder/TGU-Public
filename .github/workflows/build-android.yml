@@ -1,0 +1,86 @@
+name: TGU Android CI
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "android/**"
+      - ".github/workflows/build-android.yml"
+  pull_request:
+    paths:
+      - "android/**"
+      - ".github/workflows/build-android.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tgu-android-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Android debug APK and tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    defaults:
+      run:
+        working-directory: android
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android SDK packages
+        run: sdkmanager "platform-tools" "platforms;android-36" "build-tools;35.0.0"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.13"
+
+      - name: Configure optional persistent debug signing
+        env:
+          TGU_DEBUG_KEYSTORE_BASE64: ${{ secrets.TGU_DEBUG_KEYSTORE_BASE64 }}
+          TGU_DEBUG_KEYSTORE_PASSWORD: ${{ secrets.TGU_DEBUG_KEYSTORE_PASSWORD }}
+        shell: bash
+        run: |
+          if [[ -n "$TGU_DEBUG_KEYSTORE_BASE64" && -n "$TGU_DEBUG_KEYSTORE_PASSWORD" ]]; then
+            key_path="$RUNNER_TEMP/tgu-debug.jks"
+            printf '%s' "$TGU_DEBUG_KEYSTORE_BASE64" | base64 --decode > "$key_path"
+            echo "TGU_DEBUG_KEYSTORE_PATH=$key_path" >> "$GITHUB_ENV"
+            echo "TGU_DEBUG_KEYSTORE_PASSWORD=$TGU_DEBUG_KEYSTORE_PASSWORD" >> "$GITHUB_ENV"
+          else
+            echo "Persistent signing secrets are not configured; using a temporary debug key."
+          fi
+
+      - name: Build APK and run unit tests
+        run: gradle --no-daemon --stacktrace :app:assembleDebug :app:testDebugUnitTest
+
+      - name: Upload debug APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: TGU-Android-debug-${{ github.sha }}
+          path: android/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload unit test reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: TGU-Android-test-reports-${{ github.sha }}
+          path: |
+            android/app/build/reports/tests/testDebugUnitTest/
+            android/app/build/test-results/testDebugUnitTest/
+          if-no-files-found: warn
+          retention-days: 7

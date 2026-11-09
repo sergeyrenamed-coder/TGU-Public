@@ -1,0 +1,541 @@
+package com.rnmd.tgu.proxy
+
+import android.util.Log
+import android.os.SystemClock
+import com.rnmd.tgu.diagnostics.DiagnosticLogger
+import kotlinx.coroutines.*
+import java.net.BindException
+import java.net.InetSocketAddress
+import java.net.ServerSocket
+import java.net.Socket
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicLong
+import java.util.Locale
+
+private const val TAG = "TgWsProxyServer"
+
+/**
+ * Main MTProto proxy server.
+ * Accepts client connections, parses MTProto handshakes, and bridges traffic
+ * through WebSocket to Telegram data centers.
+ */
+class TgWsProxyServer(
+    @Volatile
+    private var config: ProxyConfig,
+    private val connectivity: ConnectivityTracker,
+) {
+    private val bridge = Bridge(connectivity)
+    internal val configSnapshot: ProxyConfig get() = config
+    private var networkEpoch = connectivity.state.value.epoch
+    private val running = AtomicBoolean(false)
+    private val listening = AtomicBoolean(false)
+    private val stopRequested = AtomicBoolean(false)
+    @Volatile
+    private var serverSocket: ServerSocket? = null
+    private var wsPool: WsPool? = null
+    private var scope: CoroutineScope? = null
+    private var statsJob: Job? = null
+    private val stoppedLatch = CountDownLatch(1)
+
+    // Throttle invalid handshake log spam
+    private val badHandshakeCount = AtomicLong(0)
+    private var lastBadHandshakeLog = 0L
+
+    // Track active handlers and sockets for deterministic shutdown.
+    private val clientJobs = ConcurrentHashMap.newKeySet<Job>()
+    private val clientSockets = ConcurrentHashMap.newKeySet<Socket>()
+    private val activeUpstreams = ConcurrentHashMap.newKeySet<Bridge.UpstreamConnection>()
+    private val tcpFallback = TcpFallbackConnector()
+
+    val isRunning: Boolean get() = listening.get()
+
+    var onStatusChange: ((Boolean) -> Unit)? = null
+
+    @Synchronized
+    fun updateConfig(newConfig: ProxyConfig) {
+        config = newConfig
+        wsPool?.updateRedirects(directWarmupRedirects())
+    }
+
+    /** Apply a route change and close existing Telegram sessions so clients reconnect on the new upstream. */
+    @Synchronized
+    fun reconfigureUpstream(newConfig: ProxyConfig) {
+        updateConfig(newConfig)
+        activeUpstreams.forEach { it.abort() }
+        clientSockets.forEach { socket -> try { socket.close() } catch (_: Exception) {} }
+        clientJobs.forEach { it.cancel() }
+    }
+
+    @Synchronized
+    fun onNetworkChanged() {
+        onConnectivityChanged()
+    }
+
+    @Synchronized
+    fun onConnectivityChanged() {
+        val epoch = connectivity.state.value.epoch
+        if (networkEpoch == epoch) {
+            wsPool?.updateRedirects(directWarmupRedirects())
+            return
+        }
+        networkEpoch = epoch
+        tcpFallback.reset(enabled = running.get() && !stopRequested.get())
+        Log.i(TAG, "Network changed, rebuilding WebSocket pool")
+        bridge.resetState()
+        activeUpstreams.forEach { it.abort() }
+        clientSockets.forEach { try { it.close() } catch (_: Exception) {} }
+        clientJobs.forEach { it.cancel() }
+        wsPool?.resetAndWarm(directWarmupRedirects())
+    }
+
+    /**
+     * Start the proxy server. Blocks until stopped.
+     */
+    suspend fun start() = withContext(Dispatchers.IO) {
+        if (stopRequested.get() || running.getAndSet(true)) {
+            Log.w(TAG, "Server already running")
+            return@withContext
+        }
+        if (stopRequested.get()) {
+            running.set(false)
+            cleanup()
+            return@withContext
+        }
+
+        ProxyStats.resetAll()
+        ProxyStats.startedAtMs = System.currentTimeMillis()
+        badHandshakeCount.set(0)
+        lastBadHandshakeLog = 0L
+        bridge.resetState() // Clear WS blacklist and cooldown on restart
+        synchronized(this@TgWsProxyServer) {
+            tcpFallback.reset(enabled = running.get() && !stopRequested.get())
+        }
+        scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+        val startupStartedAt = System.currentTimeMillis()
+
+        try {
+            // Bind before starting upstream work so a busy local port fails immediately.
+            val ss = ServerSocket()
+            ss.reuseAddress = true
+            ss.soTimeout = 0
+            try {
+                ss.bind(InetSocketAddress(config.host, config.port))
+            } catch (e: BindException) {
+                try { ss.close() } catch (_: Exception) {}
+                if (isAddressAlreadyInUse(e.message)) {
+                    throw ProxyPortInUseException(config.port, e)
+                }
+                throw e
+            }
+            serverSocket = ss
+            if (stopRequested.get() || !running.get()) {
+                ss.close()
+                return@withContext
+            }
+
+            // Initialize WS pool
+            wsPool = WsPool(
+                poolSize = config.poolSize,
+                maxAgeMs = 120_000,
+                bufferSize = config.bufferSize,
+                clock = SystemClock::elapsedRealtime,
+                connector = { target, domains, onSocketCreated ->
+                    val epoch = connectivity.state.value.epoch
+                    val sockets = mutableListOf<Socket>()
+                    var ready: RawWebSocket? = null
+                    try {
+                        for (domain in domains) {
+                            if (!connectivity.isCurrent(epoch) || !connectivity.state.value.allowsBackgroundWork) break
+                            try {
+                                ready = RawWebSocket.connect(target, domain,
+                                    connectTimeoutMs = 8_000, bufferSize = config.bufferSize,
+                                    onSocketCreated = { socket ->
+                                        sockets.add(socket)
+                                        if (!connectivity.recordIfCurrent(epoch, requireInternet = true) {
+                                            connectivity.trackSocket(epoch, socket)
+                                            onSocketCreated(socket)
+                                        }) {
+                                            socket.close()
+                                            throw CancellationException("Pool connectivity changed")
+                                        }
+                                    })
+                                break
+                            } catch (e: WsHandshakeError) {
+                                if (!e.isRedirect) break
+                            }
+                        }
+                        if (!connectivity.isCurrent(epoch) || !connectivity.state.value.allowsBackgroundWork) {
+                            ready?.abort()
+                            ready = null
+                        }
+                        ready
+                    } finally {
+                        sockets.forEach(connectivity::releaseSocket)
+                    }
+                },
+            ).also {
+                it.start(scope!!)
+                it.warmUp(directWarmupRedirects())
+            }
+            DiagnosticLogger.event(
+                "pool_warmup_started",
+                "poolSize" to config.poolSize,
+                "dcCount" to directWarmupRedirects().size,
+            )
+
+            // CF domain refresh is owned by ProxyService.
+
+            // Include the current direct-WS blacklist in periodic stats.
+            statsJob = scope!!.launch {
+                while (isActive) {
+                    delay(60_000)
+                    Log.i(TAG, "stats: ${ProxyStats.formatStats()} | ws_bl: ${bridge.blacklistSummary()}")
+                }
+            }
+
+            listening.set(true)
+            DiagnosticLogger.event(
+                "listener_ready",
+                "port" to config.port,
+                "elapsedMs" to System.currentTimeMillis() - startupStartedAt,
+            )
+
+            logStartupBanner()
+
+            onStatusChange?.invoke(true)
+
+            // Accept connections
+            while (running.get()) {
+                try {
+                    val clientSocket = ss.accept()
+                    clientSocket.tcpNoDelay = true
+                    clientSocket.sendBufferSize = config.bufferSize
+                    clientSocket.receiveBufferSize = config.bufferSize
+                    clientSockets.add(clientSocket)
+                    val epoch = connectivity.state.value.epoch
+                    if (!connectivity.trackSocket(epoch, clientSocket)) {
+                        clientSockets.remove(clientSocket)
+                        continue
+                    }
+
+                    val job = scope!!.launch {
+                        handleClient(clientSocket, epoch)
+                    }
+                    clientJobs.add(job)
+                    job.invokeOnCompletion {
+                        clientJobs.remove(job)
+                        clientSockets.remove(clientSocket)
+                        connectivity.releaseSocket(clientSocket)
+                    }
+                } catch (e: Exception) {
+                    if (running.get()) {
+                        Log.e(TAG, "Accept error: ${e.message}")
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Server error: ${e.message}", e)
+            DiagnosticLogger.failure("server_failed", e)
+            throw e
+        } finally {
+            cleanup()
+            stoppedLatch.countDown()
+        }
+    }
+
+    /**
+     * Stop the proxy server and wait for cleanup.
+     */
+    fun stop() {
+        stopRequested.set(true)
+        val wasRunning = running.getAndSet(false)
+
+        Log.i(TAG, "Stopping proxy server...")
+
+        // Close server socket first to unblock accept()
+        try {
+            serverSocket?.close()
+        } catch (_: Exception) {}
+
+        cleanup()
+
+        if (wasRunning) {
+            // Wait for the server loop to finish (max 3 seconds)
+            try {
+                stoppedLatch.await(3, TimeUnit.SECONDS)
+            } catch (_: Exception) {}
+        }
+
+        Log.i(TAG, "Proxy server stopped. ${ProxyStats.formatStats()}")
+        val stats = ProxyStats.snapshot()
+        DiagnosticLogger.event(
+            "server_stopped",
+            "total" to stats.connectionsTotal,
+            "rejected" to stats.connectionsBad,
+            "wsErrors" to stats.wsErrors,
+            "bytesUp" to stats.bytesUp,
+            "bytesDown" to stats.bytesDown,
+        )
+    }
+
+    /**
+     * Close active sockets before cancelling handlers so blocking reads unblock.
+     */
+    @Synchronized
+    private fun cleanup() {
+        val wasListening = listening.getAndSet(false)
+        statsJob?.cancel()
+        statsJob = null
+        wsPool?.stop()
+        wsPool = null
+        tcpFallback.reset(enabled = false)
+        bridge.resetState()
+
+        try {
+            serverSocket?.close()
+        } catch (_: Exception) {}
+        serverSocket = null
+
+        // Closing sockets interrupts blocking Java reads before coroutine cancellation.
+        activeUpstreams.forEach { upstream ->
+            try { upstream.abort() } catch (_: Exception) {}
+        }
+        scope?.cancel()
+        if (clientJobs.isNotEmpty()) {
+            Log.i(TAG, "Closing ${clientJobs.size} active connection(s)...")
+            clientSockets.forEach { socket ->
+                try { socket.close() } catch (_: Exception) {}
+            }
+            runBlocking {
+                withTimeoutOrNull(2_000) {
+                    clientJobs.toList().joinAll()
+                }
+            }
+        }
+
+        scope?.cancel()
+        scope = null
+        clientJobs.clear()
+        clientSockets.clear()
+        activeUpstreams.clear()
+
+        if (wasListening) onStatusChange?.invoke(false)
+    }
+
+    /**
+     * Log non-sensitive startup configuration.
+     */
+    private fun logStartupBanner() {
+        val sep = "=" .repeat(60)
+        Log.i(TAG, sep)
+        Log.i(TAG, "  Telegram MTProto WS Bridge Proxy")
+        Log.i(TAG, "  Listening on   ${config.host}:${config.port}")
+        Log.i(TAG, "  Target DC IPs:")
+        for (dc in config.dcRedirects.keys.sorted()) {
+            Log.i(TAG, "    DC$dc: ${config.dcRedirects[dc]}")
+        }
+        if (config.cfProxyEnabled) {
+            val route = if (config.cfProxyFirst) {
+                "all DCs via CF first"
+            } else if (config.cfProxyPriority) {
+                "CF before TCP fallback"
+            } else {
+                "TCP before CF fallback"
+            }
+            val domainType = if (config.cfProxyUserDomain.isNotBlank()) "user" else "auto"
+            Log.i(TAG, "  CF proxy:      enabled ($route | $domainType)")
+        }
+        Log.i(TAG, sep)
+    }
+
+    private fun directWarmupRedirects(): Map<Int, String> {
+        val current = config
+        return if (!connectivity.state.value.allowsBackgroundWork ||
+            current.upstreamProfile != null ||
+            (current.cfProxyEnabled && current.cfProxyFirst)
+        ) emptyMap() else current.dcRedirects
+    }
+
+    private suspend fun handleClient(clientSocket: Socket, epoch: Long) {
+        val clientAddr = clientSocket.remoteSocketAddress.toString()
+        ProxyStats.connectionsTotal.incrementAndGet()
+        ProxyStats.connectionsActive.incrementAndGet()
+
+        if (globalVerbose) {
+            Log.d(TAG, "New client: $clientAddr")
+        }
+
+        try {
+            val input = clientSocket.getInputStream()
+            val output = clientSocket.getOutputStream()
+
+            // Set handshake read timeout (10s, matching Python asyncio.wait_for(..., timeout=10))
+            clientSocket.soTimeout = 10_000
+
+            // Read 64-byte handshake
+            val initData = ByteArray(MtProtoConstants.HANDSHAKE_LEN)
+            var read = 0
+            while (read < initData.size) {
+                val n = input.read(initData, read, initData.size - read)
+                if (n <= 0) {
+                    // Early disconnect before the full handshake is not a bad handshake,
+                    // just log debug. Python does NOT increment connections_bad here.
+                    if (globalVerbose) {
+                        Log.d(TAG, "Client disconnected before handshake: $clientAddr")
+                    }
+                    return
+                }
+                read += n
+            }
+
+            // Clear handshake timeout — data phase has no timeout
+            clientSocket.soTimeout = 0
+
+            // Freeze the route config for this client session. A profile switch
+            // must never mix one upstream's crypto context with another endpoint.
+            val sessionConfig = config
+
+            // Parse handshake
+            val handshake = MtProtoCrypto.parseHandshake(initData, sessionConfig.secretBytes())
+            if (handshake == null) {
+                // Count only crypto/protocol failures as bad handshakes.
+                // This is where Python increments connections_bad.
+                val count = badHandshakeCount.incrementAndGet()
+                val now = System.currentTimeMillis()
+                if (now - lastBadHandshakeLog > 10_000) {
+                    lastBadHandshakeLog = now
+                    Log.w(TAG, "Invalid handshake from $clientAddr (total bad: $count)")
+                }
+                ProxyStats.connectionsBad.incrementAndGet()
+                DiagnosticLogger.event("handshake_rejected", "total" to count)
+                // Drain connection (matching Python behavior to avoid connection reset)
+                try {
+                    val drainBuf = ByteArray(4096)
+                    clientSocket.soTimeout = 5_000
+                    while (input.read(drainBuf) > 0) { /* drain */ }
+                } catch (_: Exception) {}
+                return
+            }
+
+            val dcIndex = handshake.dcIndex.toInt()
+            val absDc = if (dcIndex < 0) -dcIndex else dcIndex
+            val isMedia = dcIndex < 0
+            DiagnosticLogger.event("handshake_ok", "dc" to absDc, "media" to isMedia)
+
+            if (globalVerbose) {
+                Log.d(TAG, "Handshake OK: DC=$dcIndex (abs=$absDc, media=$isMedia) from $clientAddr")
+            }
+
+            // Generate the outbound relay handshake. A selected classic MTProxy
+            // needs its own secret-derived obfuscation keys; SOCKS5 and direct
+            // Telegram DC routes use the ordinary raw-key relay handshake.
+            val selectedUpstream = sessionConfig.upstreamProfile
+            val upstreamSecret = if (selectedUpstream?.type == ProxyType.MTPROTO) {
+                UpstreamProxyConnector.mtProtoSecretBytes(selectedUpstream.secret)
+            } else {
+                null
+            }
+            val relayInit = MtProtoCrypto.generateRelayInit(
+                handshake.protoTag,
+                handshake.dcIndex,
+                upstreamSecret,
+            )
+
+            // Build crypto context
+            val cryptoCtx = CryptoCtx(
+                clientDecryptor = handshake.clientDecryptor,
+                clientEncryptor = handshake.clientEncryptor,
+                telegramDecryptor = relayInit.telegramDecryptor,
+                telegramEncryptor = relayInit.telegramEncryptor,
+            )
+
+            val upstream = bridge.connectUpstream(
+                dc = absDc,
+                isMedia = isMedia,
+                config = sessionConfig,
+                pool = wsPool,
+                protoTag = handshake.protoTag,
+                relayInit = relayInit.initPacket,
+                tcpFallback = tcpFallback,
+                epoch = epoch,
+            )
+            if (!connectivity.recordIfCurrent(epoch) {
+                if (running.get() && !stopRequested.get()) activeUpstreams.add(upstream)
+            } || upstream !in activeUpstreams) {
+                upstream.abort()
+                return
+            }
+            DiagnosticLogger.event(
+                "upstream_connected",
+                "dc" to absDc,
+                "media" to isMedia,
+                "route" to upstream.type,
+            )
+
+            if (globalVerbose) {
+                Log.d(TAG, "Upstream connected: ${upstream.type} for DC $absDc from $clientAddr")
+            }
+
+            try {
+                bridge.bridgeReencrypt(
+                    clientInput = input,
+                    clientOutput = output,
+                    upstream = upstream,
+                    cryptoCtx = cryptoCtx,
+                    relayInit = relayInit.initPacket,
+                    bufferSize = sessionConfig.bufferSize,
+                    protoTag = handshake.protoTag,
+                    dc = absDc,
+                    isMedia = isMedia,
+                    adaptiveRoutingEnabled = sessionConfig.autoOptimizeConnection && sessionConfig.cfProxyEnabled,
+                    webSocketPingIntervalSeconds = sessionConfig.webSocketPingIntervalSeconds,
+                    closeClient = { try { clientSocket.close() } catch (_: Exception) {} },
+                )
+            } finally {
+                activeUpstreams.remove(upstream)
+                upstream.abort()
+            }
+
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: java.net.SocketTimeoutException) {
+            // A handshake timeout is not a cryptographic failure.
+            // Python does NOT increment connections_bad here.
+            if (globalVerbose) {
+                Log.d(TAG, "Handshake timeout: $clientAddr")
+            }
+            DiagnosticLogger.event("handshake_timeout")
+        } catch (e: Exception) {
+            if (globalVerbose) {
+                Log.w(TAG, "Client handler error ($clientAddr): ${cfTransportErrorForLog(e)}")
+            }
+            DiagnosticLogger.failure("client_session_failed", e)
+        } finally {
+            // Use updateAndGet to prevent going negative (can happen on restart race)
+            ProxyStats.connectionsActive.updateAndGet { if (it > 0) it - 1 else 0 }
+            try { clientSocket.close() } catch (_: Exception) {}
+            if (globalVerbose) {
+                Log.d(TAG, "Client disconnected: $clientAddr")
+            }
+        }
+    }
+
+    companion object {
+        // Verbose logging — set to BuildConfig.DEBUG by the service layer at startup.
+        @Volatile
+        var globalVerbose: Boolean = false
+    }
+}
+
+internal fun isAddressAlreadyInUse(message: String?): Boolean {
+    val normalized = message.orEmpty().lowercase(Locale.ROOT)
+    return "eaddrinuse" in normalized || "address already in use" in normalized
+}
+
+class ProxyPortInUseException(
+    val port: Int,
+    cause: Throwable,
+) : Exception("Local port $port is already in use", cause)

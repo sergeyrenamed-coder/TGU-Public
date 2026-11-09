@@ -1,0 +1,79 @@
+name: TGU Desktop CI
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "desktop/**"
+      - ".github/workflows/build-desktop.yml"
+  pull_request:
+    paths:
+      - "desktop/**"
+      - ".github/workflows/build-desktop.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tgu-desktop-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  windows:
+    name: Windows Tauri build
+    runs-on: windows-latest
+    timeout-minutes: 60
+    defaults:
+      run:
+        working-directory: desktop
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Set up MSVC environment
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: desktop/src-tauri
+
+      - name: Install Node dependencies
+        run: npm install
+
+      - name: Check TypeScript and build frontend
+        run: npm run build
+
+      - name: Generate Windows icon
+        shell: pwsh
+        run: |
+          npm install --no-save sharp png-to-ico
+          node --input-type=module -e "import sharp from 'sharp'; import pngToIco from 'png-to-ico'; import fs from 'node:fs'; const png = await sharp('public/tgu-icon.svg').resize(256, 256).png().toBuffer(); fs.mkdirSync('src-tauri/icons', { recursive: true }); fs.writeFileSync('src-tauri/icons/icon.ico', await pngToIco(png));"
+          if (-not (Test-Path "src-tauri/icons/icon.ico")) { throw "Windows icon was not generated" }
+
+      - name: Run Rust unit tests
+        run: cargo test --manifest-path src-tauri/Cargo.toml
+
+      - name: Build portable Windows executable
+        env:
+          TGU_COMMUNITY_API_BASE_URL: ${{ vars.TGU_COMMUNITY_API_BASE_URL }}
+        run: npm run tauri build -- --no-bundle
+
+      - name: Upload portable EXE
+        uses: actions/upload-artifact@v4
+        with:
+          name: TGU-Desktop-portable-${{ github.sha }}
+          path: desktop/src-tauri/target/release/tgu-desktop.exe
+          if-no-files-found: error
+          retention-days: 14
