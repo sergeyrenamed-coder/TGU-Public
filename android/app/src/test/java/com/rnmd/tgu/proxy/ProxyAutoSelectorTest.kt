@@ -12,10 +12,10 @@ class ProxyAutoSelectorTest {
     @Test
     fun emptyCatalogReturnsNoSelectionWithoutProbing() = runBlocking {
         var probeCalls = 0
-        val result = ProxyAutoSelector { _, _, _ ->
+        val result = ProxyAutoSelector(probe = { _, _, _ ->
             probeCalls++
             success(1)
-        }.findBest(emptyList())
+        }).findBest(emptyList())
 
         assertNull(result.selected)
         assertEquals(0, result.totalCandidates)
@@ -33,10 +33,10 @@ class ProxyAutoSelectorTest {
             candidate("incomplete", profile = null),
         )
 
-        val result = ProxyAutoSelector { profile, _, _ ->
+        val result = ProxyAutoSelector(probe = { profile, _, _ ->
             calls.computeIfAbsent(profile.id) { AtomicInteger() }.incrementAndGet()
             success(latencies.getValue(profile.id))
-        }.findBest(candidates)
+        }).findBest(candidates)
 
         assertEquals("candidate-1", result.selected?.profile?.id)
         assertEquals(6, result.totalCandidates)
@@ -54,14 +54,14 @@ class ProxyAutoSelectorTest {
         val calls = ConcurrentHashMap<String, AtomicInteger>()
         val entries = listOf(candidate("flaky"), candidate("stable"))
 
-        val result = ProxyAutoSelector { profile, _, _ ->
+        val result = ProxyAutoSelector(probe = { profile, _, _ ->
             val attempt = calls.computeIfAbsent(profile.id) { AtomicInteger() }.incrementAndGet()
             when {
                 profile.id == "flaky" && attempt > 1 -> failure()
                 profile.id == "flaky" -> success(1)
                 else -> success(20)
             }
-        }.findBest(entries)
+        }).findBest(entries)
 
         assertEquals("stable", result.selected?.profile?.id)
         assertEquals(2, result.firstPassAvailable)
@@ -72,10 +72,10 @@ class ProxyAutoSelectorTest {
     @Test
     fun noSuccessfulProbeNeverSelectsAnUpstream() = runBlocking {
         var calls = 0
-        val result = ProxyAutoSelector { _, _, _ ->
+        val result = ProxyAutoSelector(probe = { _, _, _ ->
             calls++
             failure()
-        }.findBest(listOf(candidate("dead")))
+        }).findBest(listOf(candidate("dead")))
 
         assertNull(result.selected)
         assertEquals(1, calls)
