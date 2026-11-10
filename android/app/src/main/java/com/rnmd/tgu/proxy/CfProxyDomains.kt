@@ -9,21 +9,21 @@ import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicReference
 import java.util.concurrent.atomic.AtomicLong
 
-/**
- * Cloudflare proxy domain management.
- * Fetches and caches domains from GitHub.
- * Follows the validated domain-pool behavior from the Python implementation.
- *
- * Uses a daemon thread for periodic refresh.
- */
+   
+                                      
+                                          
+                                                                             
+  
+                                             
+   
 object CfProxyDomains {
     private const val TAG = "CfProxyDomains"
     private const val DOMAINS_URL =
         "https://raw.githubusercontent.com/Flowseal/tg-ws-proxy/main/.github/cfproxy-domains.txt"
-    private const val REFRESH_INTERVAL_MS = 3600_000L // 1 hour
+    private const val REFRESH_INTERVAL_MS = 3600_000L          
     private const val MIN_VALID_DOMAINS = 3
 
-    // Same encoded domains as Python _CFPROXY_ENC
+                                                  
     private val DEFAULT_ENCODED = listOf(
         "virkgj.com",
         "vmmzovy.com",
@@ -47,13 +47,13 @@ object CfProxyDomains {
         "zaftuzsftqdq.com",
     )
 
-    // Same suffix as Python _S = chr(46)+chr(99)+chr(111)+chr(46)+chr(117)+chr(107)
+                                                                                    
     private val SUFFIX = charArrayOf('.', 'c', 'o', '.', 'u', 'k').concatToString()
 
     private val domains = AtomicReference<List<String>>(decodeDefaults())
     private val activeDomains = ConcurrentHashMap<Int, String>()
 
-    // Background refresh thread lifecycle.
+                                           
     @Volatile
     private var refreshThread: Thread? = null
     @Volatile
@@ -64,15 +64,15 @@ object CfProxyDomains {
         .readTimeout(10, TimeUnit.SECONDS)
         .build()
 
-    /**
-     * Decode domain using the same algorithm as Python _dd().
-     * Only decodes domains ending in ".com" — the ".com" suffix is replaced
-     * with ".co.uk" and each letter is shifted back by N positions,
-     * where N = count of alphabetic chars in the part before ".com".
-     */
+       
+                                                              
+                                                                            
+                                                                    
+                                                                     
+       
     private fun decodeDomain(s: String): String {
         if (!s.endsWith(".com")) return s
-        val prefix = s.dropLast(4) // remove ".com"
+        val prefix = s.dropLast(4)                 
         val n = prefix.count { it.isLetter() }
         val decoded = prefix.map { c ->
             if (c.isLetter()) {
@@ -105,11 +105,11 @@ object CfProxyDomains {
         if (domain in domains.get()) activeDomains[dc] = domain
     }
 
-    /**
-     * Start the hourly background refresh thread.
-     * Refreshes immediately on start, then every hour.
-     * Calling again stops the previous thread and starts a new one.
-     */
+       
+                                                  
+                                                       
+                                                                    
+       
     @Synchronized
     fun startBackgroundRefresh() {
         val previous = refreshThread
@@ -120,7 +120,7 @@ object CfProxyDomains {
         previous?.interrupt()
 
         val thread = Thread({
-            // Refresh immediately on startup (matching Python _loop).
+                                                                      
             doRefresh(generation)
             while (refreshThread === Thread.currentThread()) {
                 try {
@@ -137,9 +137,9 @@ object CfProxyDomains {
         thread.start()
     }
 
-    /**
-     * Stop the background refresh thread.
-     */
+       
+                                          
+       
     @Synchronized
     fun stopBackgroundRefresh() {
         val thread = refreshThread
@@ -150,9 +150,9 @@ object CfProxyDomains {
         thread?.interrupt()
     }
 
-    /**
-     * Actual refresh logic (matching Python refresh_cfproxy_domains).
-     */
+       
+                                                                      
+       
     private fun doRefresh(generation: Long) {
         var call: Call? = null
         try {
@@ -175,7 +175,7 @@ object CfProxyDomains {
                         .map { it.trim() }
                         .filter { it.isNotEmpty() && !it.startsWith("#") }
 
-                    // Decode each domain the same way Python does
+                                                                  
                     val decoded = normalizeDomains(encoded.map { decodeDomain(it) })
 
                     if (decoded.size >= MIN_VALID_DOMAINS) {

@@ -12,7 +12,7 @@ import javax.crypto.KeyGenerator
 import javax.crypto.SecretKey
 import javax.crypto.spec.GCMParameterSpec
 
-/** Local MTProto credentials encrypted with a non-exportable Android Keystore key. */
+                                                                                      
 class LocalProxySettingsStore(context: Context) {
     private val prefs = context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
     fun shouldRestoreAfterUpdate(): Boolean =
@@ -35,10 +35,10 @@ class LocalProxySettingsStore(context: Context) {
         check(prefs.edit().putString(SECRET_KEY, Base64.encodeToString(encrypted, Base64.NO_WRAP)).commit()) { "Could not save the encrypted local MTProto secret." }
         return secret
     }
-    /**
-     * Builds the local Telegram URI for the explicit Home screen Apply action.
-     * UI code must not invoke this during selection, testing, monitoring, or failover.
-     */
+       
+                                                                               
+                                                                                       
+       
     fun telegramProxyUri(): Uri = Uri.Builder()
         .scheme("tg").authority("proxy")
         .appendQueryParameter("server", LOCAL_HOST)

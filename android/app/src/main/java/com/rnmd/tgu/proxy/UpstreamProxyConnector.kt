@@ -9,17 +9,17 @@ import java.net.Socket
 import java.net.SocketTimeoutException
 import java.net.UnknownHostException
 
-/**
- * Opens the engine's outbound stream through a selected remote proxy.
- *
- * SOCKS5: establishes CONNECT to the selected Telegram DC and sends the
- * ordinary relay handshake through the tunnel.
- *
- * MTProto: connects to the selected remote MTProxy and sends a fresh
- * obfuscated2 handshake derived with that remote proxy's secret.
- *
- * This is a Telegram-only transport adapter. It does not create a VPN.
- */
+   
+                                                                      
+  
+                                                                        
+                                               
+  
+                                                                     
+                                                                 
+  
+                                                                       
+   
 internal object UpstreamProxyConnector {
     private const val CONNECT_TIMEOUT_MS = 8_000
     private const val HANDSHAKE_TIMEOUT_MS = 8_000
@@ -31,8 +31,8 @@ internal object UpstreamProxyConnector {
 
     fun mtProtoSecretBytes(value: String): ByteArray {
         val normalized = value.trim().lowercase()
-        // "dd" is the Telegram padded-intermediate transport marker. It is
-        // not part of the 16-byte secret used by the obfuscated2 KDF.
+                                                                           
+                                                                      
         val rawHex = if (normalized.startsWith("dd") && normalized.length == 34) {
             normalized.drop(2)
         } else {
@@ -97,7 +97,7 @@ internal object UpstreamProxyConnector {
         val output = DataOutputStream(socket.getOutputStream())
         val hasCredentials = profile.username.isNotEmpty()
 
-        // Offer only methods that TGU can actually complete.
+                                                             
         output.writeByte(5)
         if (hasCredentials) {
             output.writeByte(2)
@@ -143,7 +143,7 @@ internal object UpstreamProxyConnector {
         }?.map { it.toInt().toByte() }?.toByteArray()
 
         output.writeByte(5)
-        output.writeByte(1) // CONNECT
+        output.writeByte(1)           
         output.writeByte(0)
         when {
             ipv4 != null -> {
@@ -169,7 +169,7 @@ internal object UpstreamProxyConnector {
 
         val replyVersion = input.readUnsignedByte()
         val reply = input.readUnsignedByte()
-        input.readUnsignedByte() // RSV
+        input.readUnsignedByte()       
         val addressType = input.readUnsignedByte()
         if (replyVersion != 5) throw IOException("Invalid SOCKS5 CONNECT response.")
         when (addressType) {

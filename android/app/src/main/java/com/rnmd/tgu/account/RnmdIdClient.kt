@@ -19,10 +19,10 @@ import javax.crypto.KeyGenerator
 import javax.crypto.SecretKey
 import javax.crypto.spec.GCMParameterSpec
 
-/**
- * Shared RNMD ID client. Only public project configuration is embedded in the Android app.
- * Telegram's OIDC client secret stays in Supabase Auth and is never shipped to this client.
- */
+   
+                                                                                           
+                                                                                            
+   
 object RnmdIdClient {
     const val SUPABASE_URL = "https://hscsswcevngohjdyetjo.supabase.co"
     const val SUPABASE_PUBLISHABLE_KEY = "sb_publishable_tTZW6Omtev4wdH8TvJ6DTQ_SV-XCh6G"
@@ -55,10 +55,10 @@ object RnmdIdClient {
     }
 }
 
-/**
- * Encrypts Supabase refresh tokens, user sessions, and PKCE verifiers with an AES-256 key
- * that never leaves Android Keystore.
- */
+   
+                                                                                          
+                                      
+   
 private class EncryptedAuthStorage(context: Context) : SessionManager, CodeVerifierCache {
     private val preferences = context.getSharedPreferences(PREFERENCES, Context.MODE_PRIVATE)
     private val json = Json { encodeDefaults = true; ignoreUnknownKeys = true }

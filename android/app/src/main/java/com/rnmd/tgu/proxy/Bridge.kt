@@ -60,18 +60,18 @@ internal class CfCooldownTracker(
     }
 }
 
-/**
- * Bidirectional bridge between client TCP and upstream WebSocket/TCP.
- * Handles re-encryption of MTProto traffic.
- *
- * Matches the Python bridge.py + tg_ws_proxy.py logic including:
- * - WS blacklisting for DCs that always return HTTP redirects
- * - DC fail cooldown (30s) with reduced WS timeout (2s)
- * - MsgSplitter for splitting TCP stream into individual WS frames
- * - CF proxy multi-domain rotation with sticky active domain
- * - TCP fallback using standard DC IPs (not WS redirect IPs)
- * - Per-session stats (up/down bytes/packets, duration)
- */
+   
+                                                                      
+                                            
+  
+                                                                 
+                                                              
+                                                        
+                                                                   
+                                                             
+                                                             
+                                                        
+   
 class Bridge(private val connectivity: ConnectivityTracker) {
     private val cfDnsResolver = CfDnsResolver()
 
@@ -126,19 +126,19 @@ class Bridge(private val connectivity: ConnectivityTracker) {
 
     enum class UpstreamType { WEBSOCKET, CFPROXY, TCP }
 
-    // WS blacklist: DCs that always return redirects (permanent, like Python ws_blacklist)
+                                                                                           
     private val wsBlacklist = ConcurrentHashMap.newKeySet<String>()
 
-    // DC fail cooldown: timestamp until which WS timeout is reduced
+                                                                    
     private val dcFailUntil = ConcurrentHashMap<String, Long>()
     private val directIpFailUntil = ConcurrentHashMap<String, Long>()
     private val cfCooldowns = CfCooldownTracker()
     private val directWsCircuitBreaker = DirectWsCircuitBreaker()
     private val pendingSockets = ConcurrentHashMap.newKeySet<Socket>()
 
-    /**
-     * Reset blacklist and cooldown state (called on server restart).
-     */
+       
+                                                                     
+       
     fun resetState() {
         pendingSockets.forEach { try { it.close() } catch (_: Exception) {} }
         pendingSockets.clear()
@@ -150,9 +150,9 @@ class Bridge(private val connectivity: ConnectivityTracker) {
         directWsCircuitBreaker.reset()
     }
 
-    /**
-     * Get a summary of currently blacklisted DCs (for stats logging, #12).
-     */
+       
+                                                                           
+       
     fun blacklistSummary(): String {
         val bl = wsBlacklist.toList()
         return if (bl.isEmpty()) "none" else bl.sorted().joinToString(", ") { "DC$it" }
@@ -174,15 +174,15 @@ class Bridge(private val connectivity: ConnectivityTracker) {
         }
     }
 
-    /**
-     * Establish upstream connection with fallback chain matching Python:
-     * 1. Optionally try CF before every direct route
-     * 2. Check WS blacklist / DC not in config -> skip WS, go to fallback
-     * 3. Try WS pool hit, then direct WS with an adaptive timeout
-     * 4. On WS failure -> update blacklist/cooldown -> fallback (CF proxy / TCP)
-     *
-     * #1 FIX: Removed outer domain loop — connectToDc() handles domain iteration internally.
-     */
+       
+                                                                         
+                                                     
+                                                                          
+                                                                  
+                                                                                 
+      
+                                                                                             
+       
     internal suspend fun connectUpstream(
         dc: Int,
         isMedia: Boolean,
@@ -195,9 +195,9 @@ class Bridge(private val connectivity: ConnectivityTracker) {
     ): UpstreamConnection = withContext(Dispatchers.IO) {
         checkEpoch(epoch)
 
-        // When the user selected a Freedom Checker upstream, route this Telegram
-        // session exclusively through it. Do not silently fall back to direct
-        // DC routes, which would defeat the selected upstream's purpose.
+                                                                                 
+                                                                              
+                                                                         
         val selectedUpstream = config.upstreamProfile
         if (selectedUpstream != null) {
             val targetHost = when (selectedUpstream.type) {
@@ -274,7 +274,7 @@ class Bridge(private val connectivity: ConnectivityTracker) {
             if (conn != null) return@withContext conn
         }
 
-        // If DC not in config or WS blacklisted -> skip WS, go straight to fallback
+                                                                                    
         val targetIp = config.dcRedirects[dc]
         if (targetIp == null || dcKey in wsBlacklist) {
             if (targetIp == null) {
@@ -289,7 +289,7 @@ class Bridge(private val connectivity: ConnectivityTracker) {
             throw ProxyException("DC$dc$mediaTag no fallback available")
         }
 
-        // Determine WS timeout (adaptive, like Python)
+                                                       
         val now = System.currentTimeMillis()
         val ipFailUntil = directIpFailUntil[targetIp] ?: 0L
         if (config.cfProxyEnabled && now < ipFailUntil) {
@@ -303,7 +303,7 @@ class Bridge(private val connectivity: ConnectivityTracker) {
         val failUntil = dcFailUntil[dcKey] ?: 0L
         val wsTimeout = if (now < failUntil) WS_FAIL_TIMEOUT_MS else WS_NORMAL_TIMEOUT_MS
 
-        // 1. Try WS pool
+                         
         checkEpoch(epoch)
         var pooledWs: RawWebSocket? = null
         connectivity.recordIfCurrent(epoch) { pooledWs = pool?.get(dc, isMedia) }
@@ -328,7 +328,7 @@ class Bridge(private val connectivity: ConnectivityTracker) {
         }
         connectivity.recordIfCurrent(epoch) { ProxyStats.poolMisses.incrementAndGet() }
 
-        // 2. Try WS direct — single call to connectToDc which handles domain iteration
+                                                                                       
         var ws: RawWebSocket? = null
         var anyRedirect = false
         var allRedirects = true
@@ -390,7 +390,7 @@ class Bridge(private val connectivity: ConnectivityTracker) {
             )
         }
 
-        // WS success
+                     
         if (ws != null) {
             if (!connectivity.recordIfCurrent(epoch) {
                 dcFailUntil.remove(dcKey)
@@ -408,7 +408,7 @@ class Bridge(private val connectivity: ConnectivityTracker) {
             return@withContext UpstreamConnection(UpstreamType.WEBSOCKET, ws = ws, epoch = epoch)
         }
 
-        // WS failed -> update blacklist/cooldown
+                                                 
         record(epoch, dc, isMedia, TransportRoute.WEBSOCKET, RoutePhase.FAILED)
         connectivity.recordIfCurrent(epoch, requireInternet = true) {
             if (anyRedirect && allRedirects) {
@@ -420,7 +420,7 @@ class Bridge(private val connectivity: ConnectivityTracker) {
             }
         }
 
-        // 3. Fallback (CF proxy / TCP)
+                                       
         val conn = doFallback(dc, isMedia, config, protoTag, relayInit, tcpFallback, epoch, allowCf = !cfAttempted)
         if (conn != null) return@withContext conn
 
@@ -428,10 +428,10 @@ class Bridge(private val connectivity: ConnectivityTracker) {
         throw ProxyException("All upstream connection attempts failed for DC $dc")
     }
 
-    /**
-     * Fallback chain: CF proxy / TCP direct (order based on cfProxyPriority).
-     * Matches Python do_fallback().
-     */
+       
+                                                                              
+                                    
+       
     private suspend fun doFallback(
         dc: Int,
         isMedia: Boolean,
@@ -448,9 +448,9 @@ class Bridge(private val connectivity: ConnectivityTracker) {
 
         if (config.cfProxyEnabled && allowCf) {
             if (config.cfProxyPriority) {
-                methods.add(0, "cf")  // CF before TCP
+                methods.add(0, "cf")                  
             } else {
-                methods.add("cf")     // CF after TCP
+                methods.add("cf")                    
             }
         }
 
@@ -463,8 +463,8 @@ class Bridge(private val connectivity: ConnectivityTracker) {
                     if (conn != null) return conn
                 }
                 "tcp" -> {
-                    // TCP fallback uses standard DC IPs (like Python DC_DEFAULT_IPS),
-                    // NOT the WS redirect IPs
+                                                                                      
+                                              
                     val fallbackIp = MtProtoConstants.DC_IPS[dc]
                     if (fallbackIp != null) {
                         DiagnosticLogger.event("upstream_attempt", "dc" to dc, "media" to isMedia, "route" to "tcp")
@@ -478,10 +478,10 @@ class Bridge(private val connectivity: ConnectivityTracker) {
         return null
     }
 
-    /**
-     * CF proxy fallback with multi-domain rotation (matches Python _cfproxy_fallback).
-     * Tries active domain first, then others. Updates active domain on success.
-     */
+       
+                                                                                       
+                                                                                
+       
     private suspend fun tryCfProxyFallback(
         dc: Int,
         isMedia: Boolean,
@@ -506,7 +506,7 @@ class Bridge(private val connectivity: ConnectivityTracker) {
 
         Log.i(TAG, "DC$dc$mediaTag -> trying CF proxy (${availableDomains.size} available)")
 
-        // Keep the sticky domain fast, then cap the remaining connection pressure at two.
+                                                                                          
         val first = tryCfDomain(dc, isMedia, config.bufferSize, availableDomains.first(), epoch)
         if (first != null) return cfConnectionReady(dc, isMedia, first.first, first.second, epoch)
 
@@ -629,16 +629,16 @@ class Bridge(private val connectivity: ConnectivityTracker) {
         }
     }
 
-    /**
-     * Run bidirectional bridge with re-encryption.
-     * Client <-> Proxy <-> Telegram
-     *
-     * For WS/CF upstream: uses MsgSplitter to split TCP data into individual
-     * MTProto transport packets, each sent as a separate WS frame (matching Python).
-     *
-     * Tracks per-session traffic and duration and logs a summary on close.
-     * on close (matching Python bridge.py:298-303).
-     */
+       
+                                                   
+                                    
+      
+                                                                             
+                                                                                     
+      
+                                                                           
+                                                    
+       
     suspend fun bridgeReencrypt(
         clientInput: InputStream,
         clientOutput: OutputStream,
@@ -664,14 +664,14 @@ class Bridge(private val connectivity: ConnectivityTracker) {
         var lastResponseAt = 0L
         fun markResponse(bytes: Int) {
             val now = System.nanoTime() / 1_000_000
-            // Refresh live traffic evidence without publishing a UI update for every packet.
+                                                                                             
             if (bytes > 0 && (!responded || now - lastResponseAt >= 30_000L)) {
                 responded = true
                 lastResponseAt = now
                 record(epoch, dc, isMedia, route, RoutePhase.RESPONDING)
             }
         }
-        // Per-session traffic statistics.
+                                          
         val startTime = System.currentTimeMillis()
         val mediaTag = if (isMedia) " media" else ""
         var upBytes = 0L
@@ -709,20 +709,20 @@ class Bridge(private val connectivity: ConnectivityTracker) {
             }
         }
 
-        // Send relay init to upstream
+                                      
         when (upstream.type) {
             UpstreamType.WEBSOCKET, UpstreamType.CFPROXY -> {
                 upstream.ws!!.sendBinary(relayInit)
             }
-            UpstreamType.TCP -> Unit // TCP setup has already sent relayInit.
+            UpstreamType.TCP -> Unit                                         
         }
 
-        // Reuse decrypted client bytes for WS packet boundaries.
+                                                                 
         val splitter: MsgSplitter? = if (upstream.type != UpstreamType.TCP) {
             MsgSplitter(protoTag)
         } else null
 
-        // Cache the TCP output stream for the session.
+                                                       
         val tcpOutput = if (upstream.type == UpstreamType.TCP) {
             upstream.tcpSocket!!.getOutputStream()
         } else null
@@ -792,11 +792,11 @@ class Bridge(private val connectivity: ConnectivityTracker) {
 
         val clientToUpstream = launch(Dispatchers.IO) {
             try {
-                val buf = ByteArray(65536) // Match Python's reader.read(65536)
+                val buf = ByteArray(65536)                                     
                 while (isActive) {
                     val read = clientInput.read(buf)
                     if (read <= 0) {
-                        // Flush splitter on EOF (matching Python)
+                                                                  
                         if (splitter != null && upstream.ws != null) {
                             val tail = splitter.flush()
                             if (tail.isNotEmpty()) {
@@ -812,7 +812,7 @@ class Bridge(private val connectivity: ConnectivityTracker) {
                     upBytes += read
                     upPackets++
 
-                    // Decrypt from client, re-encrypt for telegram
+                                                                   
                     val decrypted = cryptoCtx.clientDecryptor.update(data)
                     val reencrypted = cryptoCtx.telegramEncryptor.update(decrypted)
 
@@ -856,7 +856,7 @@ class Bridge(private val connectivity: ConnectivityTracker) {
                             downPackets++
                             if (upstream.type == UpstreamType.WEBSOCKET) markDirectResponse(data.size)
 
-                            // Decrypt from telegram, re-encrypt for client
+                                                                           
                             val decrypted = cryptoCtx.telegramDecryptor.update(data)
                             val reencrypted = cryptoCtx.clientEncryptor.update(decrypted)
 
@@ -865,7 +865,7 @@ class Bridge(private val connectivity: ConnectivityTracker) {
                         }
                     }
                     UpstreamType.TCP -> {
-                        val buf = ByteArray(65536) // Match Python's reader.read(65536)
+                        val buf = ByteArray(65536)                                     
                         val tcpInput = upstream.tcpSocket!!.getInputStream()
                         while (isActive) {
                             val read = tcpInput.read(buf)
@@ -890,19 +890,19 @@ class Bridge(private val connectivity: ConnectivityTracker) {
             }
         }
 
-        // Wait for either direction to complete, then cancel the other
+                                                                       
         try {
             awaitFirstCompletion(clientToUpstream, upstreamToClient)
         } finally {
-            // Coroutine cancellation does not interrupt blocking socket reads. Close the
-            // transport first so both bridge directions can actually finish.
+                                                                                         
+                                                                             
             closeBridgeEndpoints(closeClient, upstream::abort)
             clientToUpstream.cancel()
             upstreamToClient.cancel()
             pingJob?.cancel()
             stallWatchdogJob?.cancel()
 
-            // Log a compact per-session summary.
+                                                 
             val elapsed = (System.currentTimeMillis() - startTime) / 1000.0
             Log.i(TAG, "Session: ${upstream.type} %.1fs up=%s(%d) down=%s(%d)".format(
                 elapsed,
@@ -926,13 +926,13 @@ class Bridge(private val connectivity: ConnectivityTracker) {
 
     private suspend fun awaitFirstCompletion(vararg jobs: Job) {
         try {
-            // Wait for first job to complete using select
+                                                          
             val deferreds = jobs.map { job ->
                 CompletableDeferred<Unit>().also { d ->
                     job.invokeOnCompletion { d.complete(Unit) }
                 }
             }
-            // Use kotlinx select to await whichever completes first
+                                                                    
             select<Unit> {
                 for (d in deferreds) {
                     d.onAwait {}
@@ -943,7 +943,7 @@ class Bridge(private val connectivity: ConnectivityTracker) {
     }
 }
 
-// Exception messages can contain private endpoint paths that hostname redaction cannot hide.
+                                                                                             
 internal fun cfTransportErrorForLog(error: Exception): String {
     val type = DiagnosticRedactor.field("message", error.javaClass.simpleName)
     return if (error is WsHandshakeError) "$type (HTTP ${error.statusCode})" else type

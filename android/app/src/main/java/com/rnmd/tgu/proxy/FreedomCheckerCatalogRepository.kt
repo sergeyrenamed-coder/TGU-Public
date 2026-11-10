@@ -45,10 +45,10 @@ class FreedomCheckerCatalogRepository(context: Context) {
         return runCatching { parse(raw, fetchedAt) }.getOrNull()
     }
 
-    /**
-     * Fetches the public machine-readable snapshot. Redirects to unrelated hosts
-     * are rejected deliberately; a failed refresh never deletes the last cache.
-     */
+       
+                                                                                 
+                                                                                
+       
     @Synchronized
     fun refresh(): FreedomCheckerSnapshot {
         val failures = mutableListOf<String>()
@@ -147,7 +147,7 @@ class FreedomCheckerCatalogRepository(context: Context) {
     }
 
     private fun parseRecord(obj: JSONObject): FreedomCheckerProxy? {
-        // Never offer records disabled, stale, or explicitly failed by the directory.
+                                                                                      
         if (obj.has("enabled") && !obj.optBoolean("enabled", true)) return null
         if (obj.optBoolean("stale", false)) return null
         val probeStatus = firstValue(obj, "probe_status", "probeStatus")

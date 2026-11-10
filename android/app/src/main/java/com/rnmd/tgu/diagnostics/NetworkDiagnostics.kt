@@ -157,8 +157,8 @@ class NetworkDiagnostics(context: Context) {
         val ipv4Addresses = addresses.filterIsInstance<Inet4Address>()
         val ipv6Addresses = addresses.filterIsInstance<Inet6Address>()
 
-        // Probe one address per family. Each probe performs TCP, TLS/SNI and one
-        // harmless HTTP GET / request over the same connection.
+                                                                                 
+                                                                
         val ipv4 = ipv4Addresses.firstOrNull()?.let {
             checkHttpsAddress(host, it, ipv4Addresses.size)
         }

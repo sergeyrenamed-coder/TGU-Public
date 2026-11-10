@@ -127,11 +127,11 @@ private data class VerifiedCandidate(
     val successfulChecks: Int,
 )
 
-/**
- * Tests every supported catalog entry from the Android device's current network.
- * A first sweep checks the real Telegram transport; the fastest five are then
- * re-tested twice so one lucky response does not decide the selected upstream.
- */
+   
+                                                                                 
+                                                                              
+                                                                               
+   
 class ProxyAutoSelector(
     private val probe: (ProxyProfile, Int, Int) -> ProxyTestResult = { profile, connectTimeoutMs, readTimeoutMs ->
         ProxyDiagnostics.check(profile, connectTimeoutMs, readTimeoutMs)
@@ -218,8 +218,8 @@ class ProxyAutoSelector(
                 }.awaitAll()
             }
 
-            // Send the completed first-pass results without waiting for the server.
-            // Only entries with an original directory ID are eligible for feedback.
+                                                                                    
+                                                                                    
             val completedReports = communityReports.toList()
             if (completedReports.isNotEmpty()) {
                 runCatching { onScanCompleted(scanId, completedReports) }

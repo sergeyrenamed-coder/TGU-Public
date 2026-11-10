@@ -36,7 +36,7 @@ data class ConnectivitySnapshot(
     val allowsBackgroundWork: Boolean get() = allowsTraffic && internetConfirmed
 }
 
-/** Runtime-owned evidence. Android network changes invalidate pending dials and old results. */
+                                                                                                
 class ConnectivityTracker(private val clock: () -> Long = { System.nanoTime() / 1_000_000 }) {
     private val lock = Any()
     private val _state = MutableStateFlow(ConnectivitySnapshot())

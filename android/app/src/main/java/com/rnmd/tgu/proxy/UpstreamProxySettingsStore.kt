@@ -2,10 +2,10 @@ package com.rnmd.tgu.proxy
 
 import android.content.Context
 
-/**
- * Stores only the selected profile ID. Proxy credentials remain in the
- * AES-GCM encrypted ProxyProfileStore.
- */
+   
+                                                                       
+                                       
+   
 class UpstreamProxySettingsStore(context: Context) {
     private val appContext = context.applicationContext
     private val prefs = appContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
@@ -29,8 +29,8 @@ class UpstreamProxySettingsStore(context: Context) {
 
     fun selectedProfile(): ProxyProfile? {
         val id = selectedProfileId() ?: return null
-        // Propagate decryption/storage failures. Silently dropping a selected
-        // upstream could make the engine unexpectedly fall back to direct routes.
+                                                                              
+                                                                                  
         val profile = ProxyProfileStore(appContext).load().firstOrNull { it.id == id }
         if (profile == null) clear()
         return profile

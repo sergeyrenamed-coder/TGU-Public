@@ -32,8 +32,8 @@ class LocalProxyServiceInstrumentationTest {
             .setAction(LocalProxyService.ACTION_STOP)
         val failoverSettingsStore = AutoFailoverSettingsStore(context)
         val previousFailoverSettings = failoverSettingsStore.load()
-        // This test verifies only the local listener. Do not scan public proxy
-        // catalogs or launch real upstream probes from an instrumentation test.
+                                                                               
+                                                                                
         failoverSettingsStore.save(previousFailoverSettings.copy(enabled = false))
 
         composeRule.runOnIdle {

@@ -33,7 +33,7 @@ object LocalProxyRuntime {
     internal fun publish(status: LocalProxyStatus, detail: String) { mutableState.value = LocalProxySnapshot(status, detail) }
 }
 
-/** User-started foreground service hosting a loopback-only MTProto frontend. */
+                                                                                
 class LocalProxyService : Service() {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val connectivity = ConnectivityTracker()

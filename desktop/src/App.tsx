@@ -402,8 +402,8 @@ function App() {
     setConnecting(proxy.id);
     setEngineBusy(true);
     try {
-      // Changing an upstream intentionally restarts the local listener. The
-      // local MTProto address remains 127.0.0.1:1443 in Telegram.
+                                                                            
+                                                                  
       const current = await invoke<EngineStatus>("engine_status");
       if (current.engine_ready) await invoke("engine_stop");
       const verified = await invoke<ProxyTestResult>("engine_select_upstream", { proxyId: proxy.id });
@@ -437,8 +437,8 @@ function App() {
       const selection = await invoke<AutoSelectionResult>("engine_auto_select");
       setAutoResult(selection);
 
-      // A failed new selection must not erase an existing working profile or
-      // silently change its routing policy. The previous upstream is retained.
+                                                                             
+                                                                               
       await invoke<EngineStatus>("engine_start");
       const telegramLinkOpened = await invoke<boolean>("engine_open_in_telegram_if_needed");
       await Promise.all([refreshStatus(), loadProfiles(), loadHistory()]);

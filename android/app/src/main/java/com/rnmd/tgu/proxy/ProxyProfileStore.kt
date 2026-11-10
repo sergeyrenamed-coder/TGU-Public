@@ -49,7 +49,7 @@ data class ProxyProfile(
     }
 }
 
-/** AES-GCM encrypted profiles, with a non-exportable key held by Android Keystore. */
+                                                                                      
 class ProxyProfileStore(context: Context) {
     private val prefs = context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
 

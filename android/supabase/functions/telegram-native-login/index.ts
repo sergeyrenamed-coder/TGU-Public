@@ -156,7 +156,7 @@ Deno.serve(async (req: Request) => {
         return fail("Telegram did not return a valid ID token.", 502);
       }
 
-      // Supabase Auth validates the signed ID token against the configured custom OIDC provider.
+                                                                                                 
       return json({ id_token: idToken });
     } catch (cause) {
       console.warn("Telegram token exchange failed:", cause instanceof Error ? cause.name : "unknown");

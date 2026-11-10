@@ -175,8 +175,8 @@ class TguUiLayoutScreenshotTest {
         composeRule.waitForIdle()
         require(name.matches(Regex("^[A-Za-z0-9_-]+$"))) { "Invalid screenshot name." }
 
-        // Capture the whole display rather than a single Compose root. Stream PNG
-        // chunks through logcat because the emulator is stopped before later CI steps.
+                                                                                  
+                                                                                       
         val bitmap = requireNotNull(
             InstrumentationRegistry.getInstrumentation().uiAutomation.takeScreenshot()
         ) { "UiAutomation could not capture screenshot '$name'." }

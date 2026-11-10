@@ -31,11 +31,11 @@ object ProxyDiagnostics {
             ProxyType.SOCKS5 -> checkSocks5(profile, connectTimeoutMs, readTimeoutMs)
         }
 
-    /**
-     * Performs an unauthenticated MTProto authorization handshake through
-     * classic MTProxy. A valid resPQ response proves the obfuscated2 secret
-     * was accepted and the proxy reached a Telegram data center.
-     */
+       
+                                                                          
+                                                                            
+                                                                 
+       
     private fun checkMtprotoHandshake(profile: ProxyProfile, connectTimeoutMs: Int, readTimeoutMs: Int): ProxyTestResult {
         val start = SystemClock.elapsedRealtime()
         var stage = "MTProxy TCP connect"
@@ -72,11 +72,11 @@ object ProxyDiagnostics {
         }
     }
 
-    /**
-     * Sends an unauthenticated req_pq_multi through an already-connected
-     * Telegram transport and verifies the matching resPQ nonce response.
-     * Used for direct MTProxy and SOCKS5-tunneled Telegram DC connections.
-     */
+       
+                                                                         
+                                                                         
+                                                                           
+       
     private fun verifyTelegramDc(
         socket: Socket,
         relay: RelayInitResult,
@@ -89,8 +89,8 @@ object ProxyDiagnostics {
         onStage("MTProto obfuscated2 handshake")
         output.write(relay.initPacket)
 
-        // Unencrypted MTProto authorization request:
-        // auth_key_id(8) + msg_id(8) + body_len(4) + req_pq_multi(20).
+                                                     
+                                                                       
         val random = java.security.SecureRandom()
         val nonce = ByteArray(16).also(random::nextBytes)
         val request = ByteArray(40)
@@ -106,7 +106,7 @@ object ProxyDiagnostics {
         MtProtoCrypto.writeInt32LE(request, 20, 0xBE7E8EF1.toInt())
         System.arraycopy(nonce, 0, request, 24, nonce.size)
 
-        // Classic secrets use intermediate framing; dd secrets add padded-intermediate bytes.
+                                                                                              
         val paddingLength = if (padded) random.nextInt(16) else 0
         val envelope = ByteArray(4 + request.size + paddingLength)
         MtProtoCrypto.writeInt32LE(envelope, 0, request.size + paddingLength)
@@ -122,7 +122,7 @@ object ProxyDiagnostics {
         val encryptedLength = ByteArray(4)
         input.readFully(encryptedLength)
         val plainLength = relay.telegramDecryptor.update(encryptedLength)
-        // The high bit is reserved for quick-ack framing and is not part of the length.
+                                                                                        
         val frameLength = MtProtoCrypto.readInt32LE(plainLength, 0) and 0x7FFFFFFF
         if (frameLength !in 4..4_096) {
             throw IOException("Invalid MTProto response frame length: $frameLength.")
@@ -157,11 +157,11 @@ object ProxyDiagnostics {
         }
     }
 
-    /**
-     * Measures the route that Telegram actually needs: a SOCKS5 CONNECT tunnel
-     * to a Telegram data-center IP. This intentionally avoids testing telegram.org,
-     * which may be blocked independently from Telegram DC traffic.
-     */
+       
+                                                                               
+                                                                                    
+                                                                   
+       
     private fun checkSocks5(
         profile: ProxyProfile,
         connectTimeoutMs: Int,
@@ -240,9 +240,9 @@ object ProxyDiagnostics {
                 input.readUnsignedShort()
                 if (replyCode != 0) throw IOException("SOCKS5 CONNECT failed with reply code $replyCode.")
 
-                // A successful CONNECT only proves that the SOCKS server opened a TCP
-                // tunnel. Require an actual MTProto req_pq_multi / resPQ exchange before
-                // reporting this upstream as healthy or using its latency for selection.
+                                                                                      
+                                                                                         
+                                                                                         
                 val relay = MtProtoCrypto.generateRelayInit(
                     MtProtoConstants.TAG_INTERMEDIATE,
                     2.toShort(),

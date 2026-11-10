@@ -108,7 +108,7 @@ internal class CfDnsResolver(callFactory: Call.Factory? = null) {
 
     fun reset() = synchronized(stateLock) {
         generation++
-        // New epochs must not wait for an old, potentially blocked DoH request.
+                                                                                
         resolveLock = Any()
         cache.clear()
         outageCooldown.reset()

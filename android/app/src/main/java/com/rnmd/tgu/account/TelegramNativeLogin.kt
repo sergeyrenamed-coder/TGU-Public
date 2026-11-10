@@ -28,13 +28,13 @@ import javax.crypto.spec.GCMParameterSpec
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
-/**
- * Telegram's Android native login handshake.
- *
- * Telegram cross-app and token endpoints are reached through a narrow Supabase
- * Edge Function. This keeps Telegram network traffic out of the external browser
- * and lets Telegram itself handle the consent screen through its app link.
- */
+   
+                                             
+  
+                                                                               
+                                                                                 
+                                                                           
+   
 object TelegramNativeLogin {
     const val CLIENT_ID = "9135700460"
     const val REDIRECT_URI = "https://app2482922030-login.tg.dev/tglogin"
@@ -116,7 +116,7 @@ object TelegramNativeLogin {
                 throw IOException("Telegram не вернул код авторизации. Попробуй войти ещё раз.")
             }
 
-        // Consume once before network requests: an App Link callback cannot replay this verifier.
+                                                                                                  
         val verifier = PendingVerifierStore.take(context.applicationContext)
             ?: throw IOException("Сеанс входа истёк. Нажми кнопку входа ещё раз.")
 
@@ -208,10 +208,10 @@ object TelegramNativeLogin {
     }
 }
 
-/**
- * Short-lived PKCE verifier encrypted independently from the Supabase session.
- * Android Keystore keeps the AES key non-exportable; the verifier is consumed once.
- */
+   
+                                                                               
+                                                                                    
+   
 private object PendingVerifierStore {
     private const val PREFERENCES = "tgu_telegram_native_login"
     private const val VALUE_KEY = "encrypted_pending_verifier"

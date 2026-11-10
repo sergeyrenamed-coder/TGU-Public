@@ -157,7 +157,7 @@ class MainActivity : ComponentActivity() {
             return
         }
 
-        // Compatibility handler for an older Supabase OIDC PKCE callback.
+                                                                          
         if (data.scheme != "tgu" || data.host != "auth" || data.path != "/callback") return
         accountScreenRequested.value = true
 
@@ -523,7 +523,7 @@ private fun HomeScreen(
                 onPowerClick = ::toggleEngine,
             )
 
-            // Telegram is handed off only by this explicit user action.
+                                                                        
             OutlinedButton(
                 onClick = {
                     try {

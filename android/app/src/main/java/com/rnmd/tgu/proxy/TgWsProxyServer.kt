@@ -17,11 +17,11 @@ import java.util.Locale
 
 private const val TAG = "TgWsProxyServer"
 
-/**
- * Main MTProto proxy server.
- * Accepts client connections, parses MTProto handshakes, and bridges traffic
- * through WebSocket to Telegram data centers.
- */
+   
+                             
+                                                                             
+                                              
+   
 class TgWsProxyServer(
     @Volatile
     private var config: ProxyConfig,
@@ -40,11 +40,11 @@ class TgWsProxyServer(
     private var statsJob: Job? = null
     private val stoppedLatch = CountDownLatch(1)
 
-    // Throttle invalid handshake log spam
+                                          
     private val badHandshakeCount = AtomicLong(0)
     private var lastBadHandshakeLog = 0L
 
-    // Track active handlers and sockets for deterministic shutdown.
+                                                                    
     private val clientJobs = ConcurrentHashMap.newKeySet<Job>()
     private val clientSockets = ConcurrentHashMap.newKeySet<Socket>()
     private val activeUpstreams = ConcurrentHashMap.newKeySet<Bridge.UpstreamConnection>()
@@ -60,7 +60,7 @@ class TgWsProxyServer(
         wsPool?.updateRedirects(directWarmupRedirects())
     }
 
-    /** Apply a route change and close existing Telegram sessions so clients reconnect on the new upstream. */
+                                                                                                              
     @Synchronized
     fun reconfigureUpstream(newConfig: ProxyConfig) {
         updateConfig(newConfig)
@@ -91,9 +91,9 @@ class TgWsProxyServer(
         wsPool?.resetAndWarm(directWarmupRedirects())
     }
 
-    /**
-     * Start the proxy server. Blocks until stopped.
-     */
+       
+                                                    
+       
     suspend fun start() = withContext(Dispatchers.IO) {
         if (stopRequested.get() || running.getAndSet(true)) {
             Log.w(TAG, "Server already running")
@@ -109,7 +109,7 @@ class TgWsProxyServer(
         ProxyStats.startedAtMs = System.currentTimeMillis()
         badHandshakeCount.set(0)
         lastBadHandshakeLog = 0L
-        bridge.resetState() // Clear WS blacklist and cooldown on restart
+        bridge.resetState()                                              
         synchronized(this@TgWsProxyServer) {
             tcpFallback.reset(enabled = running.get() && !stopRequested.get())
         }
@@ -117,7 +117,7 @@ class TgWsProxyServer(
         val startupStartedAt = System.currentTimeMillis()
 
         try {
-            // Bind before starting upstream work so a busy local port fails immediately.
+                                                                                         
             val ss = ServerSocket()
             ss.reuseAddress = true
             ss.soTimeout = 0
@@ -136,7 +136,7 @@ class TgWsProxyServer(
                 return@withContext
             }
 
-            // Initialize WS pool
+                                 
             wsPool = WsPool(
                 poolSize = config.poolSize,
                 maxAgeMs = 120_000,
@@ -186,9 +186,9 @@ class TgWsProxyServer(
                 "dcCount" to directWarmupRedirects().size,
             )
 
-            // CF domain refresh is owned by ProxyService.
+                                                          
 
-            // Include the current direct-WS blacklist in periodic stats.
+                                                                         
             statsJob = scope!!.launch {
                 while (isActive) {
                     delay(60_000)
@@ -207,7 +207,7 @@ class TgWsProxyServer(
 
             onStatusChange?.invoke(true)
 
-            // Accept connections
+                                 
             while (running.get()) {
                 try {
                     val clientSocket = ss.accept()
@@ -246,16 +246,16 @@ class TgWsProxyServer(
         }
     }
 
-    /**
-     * Stop the proxy server and wait for cleanup.
-     */
+       
+                                                  
+       
     fun stop() {
         stopRequested.set(true)
         val wasRunning = running.getAndSet(false)
 
         Log.i(TAG, "Stopping proxy server...")
 
-        // Close server socket first to unblock accept()
+                                                        
         try {
             serverSocket?.close()
         } catch (_: Exception) {}
@@ -263,7 +263,7 @@ class TgWsProxyServer(
         cleanup()
 
         if (wasRunning) {
-            // Wait for the server loop to finish (max 3 seconds)
+                                                                 
             try {
                 stoppedLatch.await(3, TimeUnit.SECONDS)
             } catch (_: Exception) {}
@@ -281,9 +281,9 @@ class TgWsProxyServer(
         )
     }
 
-    /**
-     * Close active sockets before cancelling handlers so blocking reads unblock.
-     */
+       
+                                                                                 
+       
     @Synchronized
     private fun cleanup() {
         val wasListening = listening.getAndSet(false)
@@ -299,7 +299,7 @@ class TgWsProxyServer(
         } catch (_: Exception) {}
         serverSocket = null
 
-        // Closing sockets interrupts blocking Java reads before coroutine cancellation.
+                                                                                        
         activeUpstreams.forEach { upstream ->
             try { upstream.abort() } catch (_: Exception) {}
         }
@@ -325,9 +325,9 @@ class TgWsProxyServer(
         if (wasListening) onStatusChange?.invoke(false)
     }
 
-    /**
-     * Log non-sensitive startup configuration.
-     */
+       
+                                               
+       
     private fun logStartupBanner() {
         val sep = "=" .repeat(60)
         Log.i(TAG, sep)
@@ -372,17 +372,17 @@ class TgWsProxyServer(
             val input = clientSocket.getInputStream()
             val output = clientSocket.getOutputStream()
 
-            // Set handshake read timeout (10s, matching Python asyncio.wait_for(..., timeout=10))
+                                                                                                  
             clientSocket.soTimeout = 10_000
 
-            // Read 64-byte handshake
+                                     
             val initData = ByteArray(MtProtoConstants.HANDSHAKE_LEN)
             var read = 0
             while (read < initData.size) {
                 val n = input.read(initData, read, initData.size - read)
                 if (n <= 0) {
-                    // Early disconnect before the full handshake is not a bad handshake,
-                    // just log debug. Python does NOT increment connections_bad here.
+                                                                                         
+                                                                                      
                     if (globalVerbose) {
                         Log.d(TAG, "Client disconnected before handshake: $clientAddr")
                     }
@@ -391,18 +391,18 @@ class TgWsProxyServer(
                 read += n
             }
 
-            // Clear handshake timeout — data phase has no timeout
+                                                                  
             clientSocket.soTimeout = 0
 
-            // Freeze the route config for this client session. A profile switch
-            // must never mix one upstream's crypto context with another endpoint.
+                                                                                
+                                                                                  
             val sessionConfig = config
 
-            // Parse handshake
+                              
             val handshake = MtProtoCrypto.parseHandshake(initData, sessionConfig.secretBytes())
             if (handshake == null) {
-                // Count only crypto/protocol failures as bad handshakes.
-                // This is where Python increments connections_bad.
+                                                                         
+                                                                   
                 val count = badHandshakeCount.incrementAndGet()
                 val now = System.currentTimeMillis()
                 if (now - lastBadHandshakeLog > 10_000) {
@@ -411,11 +411,11 @@ class TgWsProxyServer(
                 }
                 ProxyStats.connectionsBad.incrementAndGet()
                 DiagnosticLogger.event("handshake_rejected", "total" to count)
-                // Drain connection (matching Python behavior to avoid connection reset)
+                                                                                        
                 try {
                     val drainBuf = ByteArray(4096)
                     clientSocket.soTimeout = 5_000
-                    while (input.read(drainBuf) > 0) { /* drain */ }
+                    while (input.read(drainBuf) > 0) {             }
                 } catch (_: Exception) {}
                 return
             }
@@ -429,9 +429,9 @@ class TgWsProxyServer(
                 Log.d(TAG, "Handshake OK: DC=$dcIndex (abs=$absDc, media=$isMedia) from $clientAddr")
             }
 
-            // Generate the outbound relay handshake. A selected classic MTProxy
-            // needs its own secret-derived obfuscation keys; SOCKS5 and direct
-            // Telegram DC routes use the ordinary raw-key relay handshake.
+                                                                                
+                                                                               
+                                                                           
             val selectedUpstream = sessionConfig.upstreamProfile
             val upstreamSecret = if (selectedUpstream?.type == ProxyType.MTPROTO) {
                 UpstreamProxyConnector.mtProtoSecretBytes(selectedUpstream.secret)
@@ -444,7 +444,7 @@ class TgWsProxyServer(
                 upstreamSecret,
             )
 
-            // Build crypto context
+                                   
             val cryptoCtx = CryptoCtx(
                 clientDecryptor = handshake.clientDecryptor,
                 clientEncryptor = handshake.clientEncryptor,
@@ -502,8 +502,8 @@ class TgWsProxyServer(
         } catch (e: CancellationException) {
             throw e
         } catch (e: java.net.SocketTimeoutException) {
-            // A handshake timeout is not a cryptographic failure.
-            // Python does NOT increment connections_bad here.
+                                                                  
+                                                              
             if (globalVerbose) {
                 Log.d(TAG, "Handshake timeout: $clientAddr")
             }
@@ -514,7 +514,7 @@ class TgWsProxyServer(
             }
             DiagnosticLogger.failure("client_session_failed", e)
         } finally {
-            // Use updateAndGet to prevent going negative (can happen on restart race)
+                                                                                      
             ProxyStats.connectionsActive.updateAndGet { if (it > 0) it - 1 else 0 }
             try { clientSocket.close() } catch (_: Exception) {}
             if (globalVerbose) {
@@ -524,7 +524,7 @@ class TgWsProxyServer(
     }
 
     companion object {
-        // Verbose logging — set to BuildConfig.DEBUG by the service layer at startup.
+                                                                                      
         @Volatile
         var globalVerbose: Boolean = false
     }

@@ -56,7 +56,7 @@ internal class TcpFallbackConnector(
             }
             if (!isActive()) throw CancellationException("TCP fallback cancelled")
             synchronized(lock) {
-                // A reset closes pending sockets; late results cannot enter the new runtime.
+                                                                                             
                 if (connecting[endpoint] !== socket) throw IOException("TCP fallback reset")
                 connecting.remove(endpoint)
                 failures.remove(endpoint)

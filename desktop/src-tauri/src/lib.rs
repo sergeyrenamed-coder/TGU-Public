@@ -60,8 +60,8 @@ pub fn run() {
         })
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
-                // The title-bar close button hides TGU to the system tray.
-                // A full exit remains available from the tray menu.
+                                                                           
+                                                                    
                 api.prevent_close();
                 let _ = window.hide();
             }

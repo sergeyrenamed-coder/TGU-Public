@@ -27,7 +27,7 @@ class TguCommunityFeedbackClient(context: Context) {
     private val prefs = appContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
 
     fun isEnabled(): Boolean {
-        // Default to CN feedback on first run, but preserve an explicit saved opt-out.
+                                                                                       
         if (!prefs.contains(KEY_ENABLED)) {
             prefs.edit().putBoolean(KEY_ENABLED, true).apply()
         }
@@ -40,11 +40,11 @@ class TguCommunityFeedbackClient(context: Context) {
 
     fun isConfigured(): Boolean = apiBaseUrl().isNotBlank()
 
-    /**
-     * Uploads only aggregate probe results. The installation UUID is generated
-     * locally and HMAC-hashed by the server; no IP or Telegram account data is sent.
-     * The calls are asynchronous and never block proxy selection.
-     */
+       
+                                                                               
+                                                                                     
+                                                                  
+       
     fun submitScan(scanId: String, reports: List<CommunityProxyProbeReport>) {
         if (!isEnabled() || reports.isEmpty()) return
         val baseUrl = apiBaseUrl()
@@ -82,7 +82,7 @@ class TguCommunityFeedbackClient(context: Context) {
                 .build()
             CLIENT.newCall(request).enqueue(object : Callback {
                 override fun onFailure(call: Call, error: IOException) {
-                    // Community feedback is best-effort and must never affect the local scan.
+                                                                                              
                 }
 
                 override fun onResponse(call: Call, response: Response) {

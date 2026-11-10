@@ -594,7 +594,7 @@ fn is_public_ipv4(address: Ipv4Addr) -> bool {
         return false;
     }
 
-    // Exclude shared-address, protocol-assignment, benchmark and documentation ranges.
+                                                                                       
     if a == 0
         || a >= 224
         || (a == 100 && (64..=127).contains(&b))
@@ -613,7 +613,7 @@ pub(crate) fn is_public_ip(address: IpAddr) -> bool {
         IpAddr::V4(ip) => is_public_ipv4(ip),
         IpAddr::V6(ip) => {
             let segments = ip.segments();
-            // IPv4-mapped IPv6 addresses must pass the same IPv4 checks.
+                                                                         
             if segments[0..5] == [0, 0, 0, 0, 0] && segments[5] == 0xffff {
                 let v4 = Ipv4Addr::new(
                     (segments[6] >> 8) as u8,
@@ -895,7 +895,7 @@ async fn finish_auto_candidate(
         let mut snapshot = progress.lock().await;
         snapshot.completed = snapshot.completed.saturating_add(1);
         if verification {
-            // Count a finalist once after its full repeat sequence, not every probe.
+                                                                                     
         } else if result.success {
             snapshot.available = snapshot.available.saturating_add(1);
             let is_better = snapshot.best_latency_ms
@@ -1087,8 +1087,8 @@ pub async fn engine_auto_select(
         });
     }
 
-    // Like Android TGU, scan every supported catalogue candidate from the
-    // current device/network. The semaphore only limits active connections.
+                                                                          
+                                                                            
     let (available, community_reports) = match probe_all_catalog_candidates(app.clone(), records, progress.clone()).await {
         Ok(result) => result,
         Err(error) => {
@@ -1311,9 +1311,9 @@ fn generate_relay_crypto(secret: Option<&[u8]>, padded: bool) -> RelayCrypto {
         let reversed: Vec<u8> = init[8..56].iter().rev().copied().collect();
         let inbound_key = sha256_key(&reversed[0..32], secret);
         let inbound_iv: [u8; 16] = reversed[32..48].try_into().expect("fixed IV range");
-        // The remote server does not send a second obfuscated2 header before
-        // the MTProto stream. Its first response byte uses CTR offset zero.
-        // Android's MtProtoCrypto.generateRelayInit follows the same rule.
+                                                                             
+                                                                            
+                                                                           
         let decryptor = make_cipher(inbound_key, inbound_iv);
 
         return RelayCrypto {

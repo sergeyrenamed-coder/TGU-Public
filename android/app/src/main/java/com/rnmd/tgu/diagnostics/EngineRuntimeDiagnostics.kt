@@ -2,7 +2,7 @@ package com.rnmd.tgu.diagnostics
 
 import android.util.Log
 
-/** Privacy-conscious event adapter used by the embedded local MTProto runtime. */
+                                                                                  
 object DiagnosticLogger {
     private const val TAG = "TGU-LocalProxy"
     fun event(name: String, vararg fields: Pair<String, Any?>) {

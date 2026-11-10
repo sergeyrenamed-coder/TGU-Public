@@ -3,10 +3,10 @@ package com.rnmd.tgu.proxy
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicLong
 
-/**
- * Connection statistics tracking singleton.
- * Counters describe the current proxy run and reset on each start or restart.
- */
+   
+                                            
+                                                                              
+   
 object ProxyStats {
     val connectionsTotal = AtomicInteger(0)
     val connectionsActive = AtomicInteger(0)
@@ -20,7 +20,7 @@ object ProxyStats {
     val poolHits = AtomicInteger(0)
     val poolMisses = AtomicInteger(0)
 
-    /** Timestamp (ms) when proxy was last started. 0 = not started. */
+                                                                       
     @Volatile
     var startedAtMs: Long = 0L
 
@@ -58,10 +58,10 @@ object ProxyStats {
         )
     }
 
-    /**
-     * Pool format is hits/total where total = hits+misses,
-     * or "n/a" when no pool lookups occurred.
-     */
+       
+                                                           
+                                              
+       
     fun formatStats(): String {
         val s = snapshot()
         val poolTotal = s.poolHits + s.poolMisses

@@ -21,13 +21,13 @@ data class DcPortCheck(
     val detail: String
 )
 
-/**
- * TCP-only reachability checks for a small, documented reference snapshot.
- *
- * Telegram's official help.getConfig response is the authoritative source for
- * current DC options. These static addresses are fallback diagnostic targets,
- * not a guarantee that every address is current or assigned to this user.
- */
+   
+                                                                           
+  
+                                                                              
+                                                                              
+                                                                          
+   
 object TelegramDcScanner {
     private const val CONNECT_TIMEOUT_MS = 1_500
     private const val WORKER_COUNT = 8

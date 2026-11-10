@@ -49,14 +49,14 @@ class TelegramHandoffInstrumentationTest {
 
             applyButton.assertIsNotEnabled()
 
-            // Navigating through the app must not open Telegram.
+                                                                 
             composeRule.onNode(hasText("Каталог") and hasClickAction()).performClick()
             composeRule.waitForIdle()
             composeRule.onNode(hasText("Главная") and hasClickAction()).performClick()
             composeRule.waitForIdle()
             assertTrue(Intents.getIntents().none { it.action == Intent.ACTION_VIEW })
 
-            // Other navigation and proxy-management screens must never hand off a URI.
+                                                                                       
             composeRule.onNode(hasText("Диагностика") and hasClickAction()).performClick()
             composeRule.waitForIdle()
             composeRule.onNode(hasText("Аккаунт") and hasClickAction()).performClick()
@@ -78,7 +78,7 @@ class TelegramHandoffInstrumentationTest {
                 Intents.getIntents().none { it.action == Intent.ACTION_VIEW },
             )
 
-            // The apply action becomes available only while the local engine is RUNNING.
+                                                                                         
             composeRule.runOnIdle {
                 LocalProxyRuntime.publish(LocalProxyStatus.RUNNING, "Test-only running state")
             }

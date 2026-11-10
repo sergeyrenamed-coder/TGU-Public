@@ -103,7 +103,7 @@ fun FreedomCheckerSection() {
     }
 
     LaunchedEffect(repository) {
-        // Refresh on entry even when a cache exists; show cached records immediately meanwhile.
+                                                                                                
         refreshCatalog()
     }
 

@@ -2,9 +2,7 @@
 
 Публичный репозиторий исходного кода TGU для Android и Windows.
 
-RNMDTEAM · текущая публичная линия: **pre-DPI**
-
-> **Важно:** здесь опубликована версия до работ над DPI. Этот репозиторий не заявляет и не обещает обход DPI, разблокировку YouTube/Discord или универсальный VPN.
+RNMDTEAM · публичные сборки для тестирования
 
 ## Исходный код
 
@@ -15,13 +13,15 @@ RNMDTEAM · текущая публичная линия: **pre-DPI**
 
 ## Загрузки
 
-- **[TGU Releases](https://github.com/sergeyrenamed-coder/TGU-Public/releases)** — официальные сборки появятся здесь после проверки сборочного процесса.
-- **[RNMDSTORE](https://rnmdstore.netlify.app/#/tgu)** — страница TGU и информация о приложении.
-- **[TGU в Telegram](https://t.me/RNMDSTOREbot)** — каталог и ссылки на проект.
+- [Все версии TGU](https://github.com/sergeyrenamed-coder/TGU-Public/releases)
+- [Android 0.9.4](https://github.com/sergeyrenamed-coder/TGU-Public/releases/tag/android-v0.9.4)
+- [Windows 0.3.0](https://github.com/sergeyrenamed-coder/TGU-Public/releases/tag/windows-v0.3.0)
+- [RNMDSTORE](https://rnmdstore.netlify.app/#/tgu)
+- [TGU в Telegram](https://t.me/RNMDSTOREbot)
 
-На момент публикации исходников готовые постоянные APK/EXE-релизы ещё не прикреплены. CI загружает тестовые артефакты сборок на ограниченный срок; это не постоянные ссылки для скачивания.
+Android APK публикуется как debug-сборка для тестирования. Для установки поверх другой подписанной версии может потребоваться удалить старую версию. Windows EXE пока не подписан сертификатом издателя.
 
-## Что делает TGU
+## Возможности
 
 TGU помогает диагностировать подключение Telegram и использовать локальный прокси-маршрут с поддержкой классических MTProto- и SOCKS5-upstream. Приложение не создаёт системный VPN и не перенаправляет трафик остальных программ.
 
@@ -29,11 +29,9 @@ TGU помогает диагностировать подключение Teleg
 
 ## Сборки
 
-GitHub Actions запускает отдельные workflow:
-- Android: сборка debug APK и запуск unit-тестов.
-- Windows: проверка TypeScript, тесты Rust и сборка переносимого EXE.
+GitHub Actions проверяет Android-сборку и unit-тесты, TypeScript, Rust-тесты и Windows-сборку. После успешного завершения создаются отдельные prerelease-версии Android и Windows.
 
-Для стабильной подписи Android APK можно добавить секреты репозитория TGU_DEBUG_KEYSTORE_BASE64 и TGU_DEBUG_KEYSTORE_PASSWORD. Скрипт настройки находится в android/scripts/setup-tgu-signing.ps1. Без них CI использует стандартную debug-подпись.
+Для Android в CI можно настроить постоянную debug-подпись через секреты репозитория TGU_DEBUG_KEYSTORE_BASE64 и TGU_DEBUG_KEYSTORE_PASSWORD. Скрипт настройки находится в android/scripts/setup-tgu-signing.ps1.
 
 ## TGU+
 

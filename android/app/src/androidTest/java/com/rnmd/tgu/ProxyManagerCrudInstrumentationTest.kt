@@ -63,7 +63,7 @@ class ProxyManagerCrudInstrumentationTest {
             .performTextInput("00112233445566778899aabbccddeeff")
         composeRule.onNodeWithText("СОХРАНИТЬ").performClick()
 
-        // Text in the editor is not proof that the asynchronous save reached storage.
+                                                                                      
         composeRule.waitUntil(10_000) {
             composeRule.onAllNodesWithText("Добавить proxy").fetchSemanticsNodes().isEmpty()
         }

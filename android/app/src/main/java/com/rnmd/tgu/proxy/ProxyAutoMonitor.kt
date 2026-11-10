@@ -11,10 +11,10 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
-/**
- * Runs only while the user-started foreground proxy service is alive.
- * Source checks and local health checks are deliberately independent.
- */
+   
+                                                                      
+                                                                      
+   
 class ProxyAutoMonitor(
     context: Context,
     private val onProfileSelected: (ProxyProfile) -> Unit,
@@ -60,7 +60,7 @@ class ProxyAutoMonitor(
 
                 val refreshIntervalMs = settings.catalogRefreshMinutes * 60_000L
                 if (lastCatalogRefreshAt == 0L || now - lastCatalogRefreshAt >= refreshIntervalMs) {
-                    // On failure the old encrypted profiles and cached JSON remain untouched.
+                                                                                              
                     lastCatalogRefreshAt = now
                     try {
                         repository.refresh()
@@ -147,9 +147,9 @@ class ProxyAutoMonitor(
 
                     if (check.success) failureStreak = 0 else failureStreak++
 
-                    // A healthy route stays pinned. Replacing it only because another
-                    // candidate measured slightly faster closes every active Telegram
-                    // session and makes the client repeatedly reconnect.
+                                                                                      
+                                                                                      
+                                                                         
                     val statusText = when {
                         check.success && current.type == ProxyType.MTPROTO ->
                             "MTProto obfuscated2 + req_pq_multi handshake успешен · секрет принят Telegram DC"
@@ -179,9 +179,9 @@ class ProxyAutoMonitor(
                         )
                     ) {
                         nextSwitchAttemptAt = now + 90_000L
-                        // Keep a failed route out of candidate selection for a while.
-                        // Otherwise intermittent probes can make two flaky proxies
-                        // alternate and repeatedly tear down Telegram sessions.
+                                                                                      
+                                                                                   
+                                                                                
                         failedProfileUntil[current.id] = now + FAILED_PROFILE_COOLDOWN_MS
                         val selection = findBestCandidate(
                             repository = repository,
@@ -265,11 +265,11 @@ class ProxyAutoMonitor(
         excludedProfileIds: Set<String> = emptySet(),
     ): FreedomCheckerProxy? = findBestCandidate(repository, currentId, excludedProfileIds)?.selected
 
-    /**
-     * Uses the complete device-side probe, not the server's last-known result.
-     * The candidate is only applied after the same repeated verification used
-     * by the manual selector has succeeded on this phone's current network.
-     */
+       
+                                                                               
+                                                                              
+                                                                            
+       
     private suspend fun findBestCandidate(
         repository: FreedomCheckerCatalogRepository,
         currentId: String?,

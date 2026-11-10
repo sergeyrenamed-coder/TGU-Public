@@ -6,7 +6,7 @@ $ErrorActionPreference = "Stop"
 
 $keytoolPath = $null
 
-# First try PATH and common Java environment variables.
+                                                       
 $keytoolCommand = Get-Command keytool.exe -ErrorAction SilentlyContinue
 if (-not $keytoolCommand) {
     $keytoolCommand = Get-Command keytool -ErrorAction SilentlyContinue
@@ -40,7 +40,7 @@ foreach ($candidate in $candidatePaths) {
     }
 }
 
-# Search common versioned JDK folders without scanning the entire disk.
+                                                                       
 $searchRoots = @()
 if ($env:ProgramFiles) {
     $searchRoots += (Join-Path $env:ProgramFiles "Java")

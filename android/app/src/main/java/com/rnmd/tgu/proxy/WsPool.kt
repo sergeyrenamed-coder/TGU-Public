@@ -7,7 +7,7 @@ import java.net.Socket
 import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.Channel
 
-/** Idle direct WebSockets, with one rotation/refill worker per DC/media route. */
+                                                                                  
 class WsPool internal constructor(
     private val poolSize: Int,
     private val maxAgeMs: Long,
@@ -50,7 +50,7 @@ class WsPool internal constructor(
             running = true
             val token = Any()
             owner = token
-            // Cancellation cannot wait for blocking IO children before closing their sockets.
+                                                                                              
             scopeMonitor = coroutineScope.launch(Dispatchers.Default, start = CoroutineStart.UNDISPATCHED) {
                 try {
                     awaitCancellation()
@@ -212,7 +212,7 @@ class WsPool internal constructor(
                     } catch (e: CancellationException) {
                         throw e
                     } catch (_: Exception) {
-                        // A failed dial contributes to the batch backoff below.
+                                                                                
                     } finally {
                         synchronized(lock) { socket?.let { bucket.pending.remove(it) } }
                         if (!adopted) {

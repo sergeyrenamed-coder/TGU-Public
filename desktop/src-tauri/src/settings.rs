@@ -84,16 +84,16 @@ pub fn load(app: &AppHandle) -> Result<DesktopSettings, String> {
         .map_err(|e| format!("Parse desktop settings: {e}"))?;
     let mut needs_save = false;
 
-    // Older releases defaulted feedback to off and did not distinguish a
-    // default value from an explicit user choice. Enable it once on upgrade;
-    // after this migration, the user's opt-out is preserved.
+                                                                         
+                                                                             
+                                                             
     if !settings.community_feedback_preference_set {
         settings.community_feedback_enabled = true;
         settings.community_feedback_preference_set = true;
         needs_save = true;
     }
 
-    // Values written by an older/newer build are always validated before use.
+                                                                              
     if settings.validate().is_err() {
         settings = DesktopSettings::default();
         needs_save = true;

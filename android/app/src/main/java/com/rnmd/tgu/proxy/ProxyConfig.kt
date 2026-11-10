@@ -4,9 +4,9 @@ import java.net.Inet6Address
 import java.net.InetAddress
 import java.security.SecureRandom
 
-/**
- * Proxy configuration. Matches the Python ProxyConfig.
- */
+   
+                                                       
+   
 data class ProxyConfig(
     val host: String = "127.0.0.1",
     val port: Int = 1443,
@@ -25,15 +25,15 @@ data class ProxyConfig(
     val webSocketPingIntervalSeconds: Int = 180,
     val showTrafficInNotification: Boolean = true,
     val cfProxyUserDomain: String = "",
-    /** Optional external Telegram-only upstream selected by the user. */
+                                                                         
     val upstreamProfile: ProxyProfile? = null,
     val showDetailedStats: Boolean = false,
     val appTheme: String = "system",
     val dynamicColor: Boolean = false,
 ) {
-    /**
-     * Get the secret as raw bytes (16 bytes from 32 hex chars).
-     */
+       
+                                                                
+       
     fun secretBytes(): ByteArray {
         require(secret.matches(Regex("^[0-9a-fA-F]{32}$"))) {
             "Secret must contain exactly 32 hexadecimal characters"
@@ -41,18 +41,18 @@ data class ProxyConfig(
         return secret.chunked(2).map { it.toInt(16).toByte() }.toByteArray()
     }
 
-    /**
-     * Get all available CF proxy domains for fallback rotation.
-     */
+       
+                                                                
+       
     fun getAllCfDomains(): List<String> {
         if (!cfProxyEnabled) return emptyList()
         if (cfProxyUserDomain.isNotBlank()) return listOf(cfProxyUserDomain)
         return CfProxyDomains.getDomains()
     }
 
-    /**
-     * Format DC redirects as text for settings display.
-     */
+       
+                                                        
+       
     fun dcRedirectsText(): String {
         return dcRedirects.entries
             .sortedBy { it.key }
@@ -66,9 +66,9 @@ data class ProxyConfig(
             return bytes.joinToString("") { "%02x".format(it) }
         }
 
-        /**
-         * Parse DC redirects from text format (one "DC:IP" per line).
-         */
+           
+                                                                      
+           
         fun parseDcRedirects(text: String): Map<Int, String> {
             val result = mutableMapOf<Int, String>()
             for (line in text.lines()) {

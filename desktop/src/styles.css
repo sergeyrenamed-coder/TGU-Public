@@ -107,7 +107,7 @@ button{font:inherit;color:inherit;cursor:pointer}
 }
 
 
-/* Live proxy auto-selection progress — monochrome, same interaction model as Android. */
+                                                                                         
 .auto-progress-panel{display:flex;flex-direction:column;gap:13px}
 .auto-progress-count{font:12px "DM Mono",monospace;color:#f2f2f2;white-space:nowrap}
 .auto-progress-track{height:6px;overflow:hidden;border-radius:20px;background:#2a2a2a}
@@ -125,7 +125,7 @@ button{font:inherit;color:inherit;cursor:pointer}
 }
 
 
-/* Android parity pages — desktop layouts, same monochrome component language. */
+                                                                                 
 .profile-list{display:flex;flex-direction:column;gap:9px;padding-bottom:14px}
 .profile-card{border:1px solid #292929;border-radius:8px;background:#151515;padding:14px 15px}
 .profile-card-main{display:flex;justify-content:space-between;align-items:flex-start;gap:14px}

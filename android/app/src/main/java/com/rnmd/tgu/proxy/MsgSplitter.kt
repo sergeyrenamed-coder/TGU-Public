@@ -1,11 +1,11 @@
 package com.rnmd.tgu.proxy
 
-/**
- * MTProto message splitter for splitting TCP stream into individual WS frames.
- * Parses protocol-specific length headers from the bridge's already decrypted bytes,
- * while preserving the corresponding encrypted bytes for upstream WS frames.
- * Falls back to passthrough mode on unrecognized protocol.
- */
+   
+                                                                               
+                                                                                     
+                                                                             
+                                                           
+   
 class MsgSplitter(
     protoTag: Int,
 ) {
@@ -18,11 +18,11 @@ class MsgSplitter(
     private var plainBuf = ByteArray(0)
     private var disabled = false
 
-    /**
-     * Split encrypted data into individual MTProto transport packets.
-     * Plain bytes must correspond byte-for-byte to the encrypted chunk.
-     * Each returned ByteArray is a complete packet to be sent as a WS frame.
-     */
+       
+                                                                      
+                                                                        
+                                                                             
+       
     fun split(chunk: ByteArray, plain: ByteArray): List<ByteArray> {
         require(chunk.size == plain.size) { "MTProto splitter chunks must have equal lengths" }
         if (chunk.isEmpty()) return emptyList()
@@ -36,18 +36,18 @@ class MsgSplitter(
         while (offset < cipherBuf.size) {
             val packetLen = nextPacketLen(offset)
             if (packetLen == null) {
-                // Not enough data yet — wait for more
+                                                      
                 break
             }
             if (packetLen <= 0) {
-                // Unrecognized protocol — send remaining as single chunk, disable splitting
+                                                                                            
                 parts.add(cipherBuf.copyOfRange(offset, cipherBuf.size))
                 cipherBuf = ByteArray(0)
                 plainBuf = ByteArray(0)
                 disabled = true
                 return parts
             }
-            // Extract one complete packet
+                                          
             parts.add(cipherBuf.copyOfRange(offset, offset + packetLen))
             offset += packetLen
         }
@@ -62,9 +62,9 @@ class MsgSplitter(
         return parts
     }
 
-    /**
-     * Flush remaining buffered data (called on stream EOF).
-     */
+       
+                                                            
+       
     fun flush(): List<ByteArray> {
         if (cipherBuf.isEmpty()) return emptyList()
         val tail = cipherBuf.copyOf()
@@ -73,26 +73,26 @@ class MsgSplitter(
         return listOf(tail)
     }
 
-    /**
-     * Determine the length of the next complete packet in plainBuf.
-     * Returns null if not enough data, 0 if protocol is unknown (disable splitting),
-     * or the packet length in bytes.
-     */
+       
+                                                                    
+                                                                                     
+                                     
+       
     private fun nextPacketLen(offset: Int): Int? {
         if (offset >= plainBuf.size) return null
         return when (proto) {
             MtProtoConstants.TAG_ABRIDGED -> nextAbridgedLen(offset)
             MtProtoConstants.TAG_INTERMEDIATE,
             MtProtoConstants.TAG_PADDED_INTERMEDIATE -> nextIntermediateLen(offset)
-            else -> 0 // Unknown protocol, disable splitting
+            else -> 0                                       
         }
     }
 
-    /**
-     * Parse abridged protocol length header.
-     * First byte: if < 0x7F, payload length = byte * 4 (header = 1 byte)
-     *             if 0x7F or 0xFF, next 3 bytes = LE length * 4 (header = 4 bytes)
-     */
+       
+                                             
+                                                                         
+                                                                                   
+       
     private fun nextAbridgedLen(offset: Int): Int? {
         val first = plainBuf[offset].toInt() and 0xFF
         val headerLen: Int
@@ -117,10 +117,10 @@ class MsgSplitter(
         return if (plainBuf.size - offset < packetLen) null else packetLen
     }
 
-    /**
-     * Parse intermediate protocol length header.
-     * First 4 bytes = LE uint32, masked with 0x7FFFFFFF = payload length.
-     */
+       
+                                                 
+                                                                          
+       
     private fun nextIntermediateLen(offset: Int): Int? {
         if (plainBuf.size - offset < 4) return null
         val payloadLen = MtProtoCrypto.readInt32LE(plainBuf, offset).toLong() and 0x7FFFFFFFL

@@ -1,0 +1,176 @@
+name: TGU Releases
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "android/**"
+      - "desktop/**"
+      - ".github/workflows/release.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: tgu-release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  android:
+    name: Build Android 0.9.4
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    defaults:
+      run:
+        working-directory: android
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v4
+        with:
+          packages: 'platform-tools'
+
+      - name: Install Android SDK packages
+        run: sdkmanager "platform-tools" "platforms;android-36" "build-tools;35.0.0"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.13"
+
+      - name: Build APK and run unit tests
+        run: gradle --no-daemon --stacktrace :app:assembleDebug :app:testDebugUnitTest
+
+      - name: Prepare release asset
+        shell: bash
+        run: |
+          mkdir -p "$RUNNER_TEMP/release"
+          cp app/build/outputs/apk/debug/app-debug.apk "$RUNNER_TEMP/release/TGU-Android-v0.9.4-debug.apk"
+
+      - name: Upload Android release asset
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-android
+          path: ${{ runner.temp }}/release/TGU-Android-v0.9.4-debug.apk
+          if-no-files-found: error
+          retention-days: 3
+
+  windows:
+    name: Build Windows 0.3.0
+    runs-on: windows-latest
+    timeout-minutes: 60
+    defaults:
+      run:
+        working-directory: desktop
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Set up MSVC environment
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: desktop/src-tauri
+
+      - name: Install Node dependencies
+        run: npm install
+
+      - name: Check TypeScript and build frontend
+        run: npm run build
+
+      - name: Generate Windows icon
+        shell: pwsh
+        run: |
+          npm install --no-save sharp png-to-ico
+          node --input-type=module -e "import sharp from 'sharp'; import pngToIco from 'png-to-ico'; import fs from 'node:fs'; const png = await sharp('public/tgu-icon.svg').resize(256, 256).png().toBuffer(); fs.mkdirSync('src-tauri/icons', { recursive: true }); fs.writeFileSync('src-tauri/icons/icon.ico', await pngToIco(png));"
+          if (-not (Test-Path "src-tauri/icons/icon.ico")) { throw "Windows icon was not generated" }
+
+      - name: Run Rust unit tests
+        run: cargo test --manifest-path src-tauri/Cargo.toml
+
+      - name: Build portable executable
+        env:
+          TGU_COMMUNITY_API_BASE_URL: ${{ vars.TGU_COMMUNITY_API_BASE_URL }}
+        run: npm run tauri build -- --no-bundle
+
+      - name: Prepare release asset
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path "$env:RUNNER_TEMP/release" | Out-Null
+          Copy-Item "src-tauri/target/release/tgu-desktop.exe" "$env:RUNNER_TEMP/release/TGU-Desktop-v0.3.0-portable.exe"
+
+      - name: Upload Windows release asset
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-windows
+          path: ${{ runner.temp }}/release/TGU-Desktop-v0.3.0-portable.exe
+          if-no-files-found: error
+          retention-days: 3
+
+  publish:
+    name: Publish GitHub Releases
+    needs: [android, windows]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download Android asset
+        uses: actions/download-artifact@v4
+        with:
+          name: release-android
+          path: release-android
+
+      - name: Download Windows asset
+        uses: actions/download-artifact@v4
+        with:
+          name: release-windows
+          path: release-windows
+
+      - name: Publish Android prerelease
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: android-v0.9.4
+          target_commitish: ${{ github.sha }}
+          name: TGU Android 0.9.4
+          prerelease: true
+          make_latest: false
+          body: |
+            Android public test build for TGU 0.9.4.
+
+            The attached APK is a debug-signed build. It is provided for testing and is not a production-signed Play Store package. A fresh install may be required when the debug signing key differs from a previously installed build.
+          files: release-android/TGU-Android-v0.9.4-debug.apk
+
+      - name: Publish Windows prerelease
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: windows-v0.3.0
+          target_commitish: ${{ github.sha }}
+          name: TGU Desktop 0.3.0
+          prerelease: true
+          make_latest: false
+          body: |
+            Windows portable public test build for TGU Desktop 0.3.0.
+
+            The executable is portable and currently unsigned. Windows may show its standard unknown-publisher warning.
+          files: release-windows/TGU-Desktop-v0.3.0-portable.exe
