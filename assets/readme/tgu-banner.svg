@@ -1,0 +1,54 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="440" viewBox="0 0 1600 440" role="img" aria-labelledby="title desc">
+  <title id="title">TGU — Telegram Unlocker</title>
+  <desc id="desc">Monochrome technical banner for TGU by RNMDTEAM</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#050505"/>
+      <stop offset="0.55" stop-color="#111111"/>
+      <stop offset="1" stop-color="#030303"/>
+    </linearGradient>
+    <radialGradient id="glow">
+      <stop offset="0" stop-color="#ffffff" stop-opacity=".15"/>
+      <stop offset="1" stop-color="#ffffff" stop-opacity="0"/>
+    </radialGradient>
+    <pattern id="grid" width="34" height="34" patternUnits="userSpaceOnUse">
+      <path d="M34 0H0V34" fill="none" stroke="#ffffff" stroke-opacity=".055" stroke-width="1"/>
+    </pattern>
+    <linearGradient id="metal" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#fff"/>
+      <stop offset=".5" stop-color="#777"/>
+      <stop offset="1" stop-color="#eee"/>
+    </linearGradient>
+    <filter id="soft">
+      <feGaussianBlur stdDeviation="18"/>
+    </filter>
+  </defs>
+  <rect width="1600" height="440" fill="url(#bg)"/>
+  <rect width="1600" height="440" fill="url(#grid)"/>
+  <ellipse cx="1210" cy="220" rx="390" ry="250" fill="url(#glow)"/>
+  <path d="M860 220C1020 54 1260 45 1430 196C1300 355 1035 382 860 220Z" fill="none" stroke="#fff" stroke-opacity=".12" stroke-width="2"/>
+  <path d="M900 220C1040 96 1250 100 1392 220C1250 340 1040 344 900 220Z" fill="none" stroke="#fff" stroke-opacity=".38" stroke-width="2"/>
+  <path d="M950 220C1070 144 1218 150 1340 220C1218 290 1070 296 950 220Z" fill="none" stroke="#fff" stroke-opacity=".18" stroke-width="1.5"/>
+  <g transform="translate(1110 220) rotate(-12)">
+    <rect x="-74" y="-124" width="148" height="248" rx="22" fill="#080808" stroke="url(#metal)" stroke-width="4"/>
+    <rect x="-61" y="-108" width="122" height="216" rx="13" fill="#141414" stroke="#fff" stroke-opacity=".18"/>
+    <rect x="-20" y="-96" width="40" height="5" rx="2.5" fill="#999"/>
+    <path d="M-42 18H42M-42 36H24M-42 54H34" stroke="#fff" stroke-opacity=".26" stroke-width="3" stroke-linecap="round"/>
+    <circle cx="0" cy="86" r="7" fill="#fff" fill-opacity=".5"/>
+  </g>
+  <g fill="#fff">
+    <circle cx="896" cy="219" r="4"/>
+    <circle cx="1390" cy="220" r="4"/>
+    <circle cx="1194" cy="58" r="3" opacity=".8"/>
+    <circle cx="1280" cy="366" r="3" opacity=".7"/>
+    <circle cx="988" cy="110" r="2" opacity=".6"/>
+    <circle cx="1438" cy="118" r="2" opacity=".6"/>
+  </g>
+  <path d="M80 78H300" stroke="#fff" stroke-opacity=".55" stroke-width="2"/>
+  <text x="80" y="178" fill="#fff" font-family="Arial,Helvetica,sans-serif" font-size="100" font-weight="800" letter-spacing="-5">TGU</text>
+  <text x="86" y="224" fill="#d8d8d8" font-family="Arial,Helvetica,sans-serif" font-size="25" font-weight="500" letter-spacing="5">TELEGRAM UNLOCKER</text>
+  <text x="86" y="290" fill="#999" font-family="Arial,Helvetica,sans-serif" font-size="18" letter-spacing="4">ANDROID  /  WINDOWS</text>
+  <text x="86" y="352" fill="#777" font-family="Arial,Helvetica,sans-serif" font-size="15" letter-spacing="3">AN RNMDTEAM PROJECT</text>
+  <path d="M80 382H650" stroke="#fff" stroke-opacity=".18" stroke-width="1"/>
+  <text x="1515" y="412" text-anchor="end" fill="#777" font-family="Arial,Helvetica,sans-serif" font-size="13" letter-spacing="3">RNMD / 01</text>
+</svg>
