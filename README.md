@@ -121,33 +121,9 @@ TGU поднимает локальный MTProto-узел, к которому 
 
 ## Как это работает
 
-```text
-┌──────────────────────┐
-│     Telegram         │
-│  Android / Windows   │
-└──────────┬───────────┘
-           │
-           │ 127.0.0.1:1443
-           ▼
-┌──────────────────────┐
-│     TGU Engine       │
-│  Local MTProto node  │
-│  Diagnostics         │
-│  Profile selection   │
-└──────────┬───────────┘
-           │
-           │ Selected upstream
-           ▼
-┌──────────────────────┐
-│   MTProto / SOCKS5   │
-│    Proxy server      │
-└──────────┬───────────┘
-           │
-           ▼
-┌──────────────────────┐
-│   Telegram network   │
-└──────────────────────┘
-```
+<p align="center">
+  <img src="assets/readme/tgu-architecture.svg" alt="Схема маршрутизации Telegram через локальный TGU Engine и выбранный прокси" width="820">
+</p>
 
 TGU обслуживает только подключение Telegram через собственный локальный узел. Это не системный VPN-туннель.
 
