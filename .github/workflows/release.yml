@@ -70,7 +70,7 @@ jobs:
 
       - name: Verify signed release APK
         run: |
-          apksigner verify --verbose --print-certs app/build/outputs/apk/debug/app-debug.apk
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs app/build/outputs/apk/debug/app-debug.apk
           keytool -list -keystore "$TGU_DEBUG_KEYSTORE_PATH" -storepass "$TGU_DEBUG_KEYSTORE_PASSWORD" -alias tgu-debug > /dev/null
 
       - name: Prepare release asset
