@@ -1,19 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- Unified TGU mark, vector-traced from the provided 512px app icon. -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="72dp"
     android:height="72dp"
     android:viewportWidth="512"
     android:viewportHeight="512">
-    <path
-        android:fillColor="#FF000000"
-        android:pathData="M0,0h512v512H0z" />
-    <path
-        android:fillColor="#FFFFFFFF"
-        android:pathData="M256,66 C200,66 160,106 160,162 L160,190 L196,190 L196,162 C196,126 220,102 256,102 C292,102 316,126 316,162 L316,190 L352,190 L352,162 C352,106 312,66 256,66 Z" />
-    <path
-        android:fillColor="#FFFFFFFF"
-        android:pathData="M125,220 H387 V418 H125 Z" />
-    <path
-        android:fillColor="#FF000000"
-        android:pathData="M165,280 L350,235 L300,365 L258,325 L223,353 L227,305 Z" />
+    <path android:fillColor="#FF000000" android:pathData="M0,0h512v512H0z" />
+    <path android:fillColor="#FFFFFFFF" android:fillType="evenOdd"
+        android:pathData="M 222 118 L 211 124 L 203 130 L 196 137 L 188 148 L 183 158 L 178 175 L 178 182 L 177 183 L 177 231 L 174 233 L 165 235 L 160 238 L 152 246 L 146 261 L 146 368 L 149 378 L 152 383 L 160 391 L 165 394 L 175 397 L 336 397 L 346 394 L 351 391 L 359 383 L 362 378 L 365 368 L 365 261 L 362 251 L 359 246 L 348 236 L 336 232 L 205 232 L 204 231 L 204 182 L 206 173 L 211 162 L 216 155 L 228 145 L 245 139 L 261 139 L 273 142 L 281 146 L 289 152 L 296 160 L 302 173 L 304 189 L 309 195 L 314 197 L 319 197 L 324 195 L 328 191 L 330 186 L 329 171 L 324 155 L 317 143 L 306 131 L 298 125 L 285 118 L 273 114 L 262 113 L 261 112 L 239 113 Z M 324 269 L 324 273 L 309 313 L 291 365 L 288 368 L 284 367 L 257 344 L 252 346 L 239 358 L 237 356 L 237 327 L 241 323 L 294 288 L 227 317 L 189 309 L 186 307 L 186 305 L 191 301 L 278 279 L 282 277 L 293 275 L 320 267 Z" />
 </vector>
