@@ -41,8 +41,8 @@ import kotlinx.coroutines.withContext
    
 object TelegramNativeLogin {
     const val CLIENT_ID = "9135700460"
-    const val REDIRECT_URI = "https://app2482922030-login.tg.dev/tglogin"
-    private const val REDIRECT_HOST = "app2482922030-login.tg.dev"
+    const val REDIRECT_URI = "https://app4209262229-login.tg.dev/tglogin"
+    private const val REDIRECT_HOST = "app4209262229-login.tg.dev"
 
     /**
      * When the signing certificate configured in Telegram's Native App registration
@@ -146,7 +146,7 @@ object TelegramNativeLogin {
 
     fun isCallback(uri: Uri): Boolean =
         uri.scheme.equals("https", ignoreCase = true) &&
-            uri.host.equals("app2482922030-login.tg.dev", ignoreCase = true) &&
+            uri.host.equals(REDIRECT_HOST, ignoreCase = true) &&
             uri.path == "/tglogin"
 
     suspend fun complete(

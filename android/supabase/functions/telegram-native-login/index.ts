@@ -1,7 +1,7 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 
 const TELEGRAM_CLIENT_ID = "9135700460";
-const TELEGRAM_REDIRECT_URI = "https://app2482922030-login.tg.dev/tglogin";
+const TELEGRAM_REDIRECT_URI = "https://app4209262229-login.tg.dev/tglogin";
 const TELEGRAM_CROSSAPP = "https://oauth.telegram.org/crossapp";
 const TELEGRAM_TOKEN = "https://oauth.telegram.org/token";
 

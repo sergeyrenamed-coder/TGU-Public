@@ -18,7 +18,7 @@ concurrency:
 
 jobs:
   android:
-    name: Build Android 0.9.5
+    name: Build Android 0.9.6
     runs-on: ubuntu-latest
     timeout-minutes: 45
     defaults:
@@ -83,13 +83,13 @@ jobs:
         shell: bash
         run: |
           mkdir -p "$RUNNER_TEMP/release"
-          cp app/build/outputs/apk/debug/app-debug.apk "$RUNNER_TEMP/release/TGU-Android-v0.9.5-debug.apk"
+          cp app/build/outputs/apk/debug/app-debug.apk "$RUNNER_TEMP/release/TGU-Android-v0.9.6-debug.apk"
 
       - name: Upload Android release asset
         uses: actions/upload-artifact@v4
         with:
           name: release-android
-          path: ${{ runner.temp }}/release/TGU-Android-v0.9.5-debug.apk
+          path: ${{ runner.temp }}/release/TGU-Android-v0.9.6-debug.apk
           if-no-files-found: error
           retention-days: 3
 
@@ -173,19 +173,19 @@ jobs:
       - name: Publish Android prerelease
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: android-v0.9.5
+          tag_name: android-v0.9.6
           target_commitish: ${{ github.sha }}
-          name: TGU Android 0.9.5
+          name: TGU Android 0.9.6
           prerelease: true
           make_latest: false
           body: |
-            Android public test build for TGU 0.9.5.
+            Android public test build for TGU 0.9.6.
 
             Signed with the persistent project debug keystore to support in-place
             updates on devices previously using that certificate. Existing
             installations signed by a DIFFERENT certificate cannot be updated
             without the original key and will require a one-time reinstall.
-          files: release-android/TGU-Android-v0.9.5-debug.apk
+          files: release-android/TGU-Android-v0.9.6-debug.apk
 
   publish-windows:
     name: Publish Windows prerelease
