@@ -68,10 +68,16 @@ jobs:
       - name: Build APK and run unit tests
         run: gradle --no-daemon --stacktrace :app:assembleDebug :app:testDebugUnitTest
 
-      - name: Verify signed release APK
+      - name: Verify pinned signing certificate and signed release APK
+        shell: bash
         run: |
+          expected="16:DD:84:A2:36:98:8D:08:EA:13:6B:2F:0F:6D:1A:C4:03:7C:01:2F:BC:1C:9E:1E:F1:94:3A:21:85:A9:B3:C7"
+          actual="$(keytool -list -v -keystore "$TGU_DEBUG_KEYSTORE_PATH" -storepass "$TGU_DEBUG_KEYSTORE_PASSWORD" -alias tgu-debug | grep 'SHA256:' | head -n 1 | sed -E 's/.*SHA256:[[:space:]]*//')"
+          if [[ "$actual" != "$expected" ]]; then
+            echo "::error::Wrong Android signing certificate. Expected pinned SHA-256 $expected but got $actual. Do not rotate the release key."
+            exit 1
+          fi
           "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs app/build/outputs/apk/debug/app-debug.apk
-          keytool -list -keystore "$TGU_DEBUG_KEYSTORE_PATH" -storepass "$TGU_DEBUG_KEYSTORE_PASSWORD" -alias tgu-debug > /dev/null
 
       - name: Prepare release asset
         shell: bash
