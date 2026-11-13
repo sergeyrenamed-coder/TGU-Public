@@ -56,14 +56,25 @@ class LocalProxyService : Service() {
             ACTION_STOP -> {
                 persistRestoreAfterUpdate(false)
                 stopProxy()
+                // The user explicitly stopped TGU: never restart it automatically.
+                return START_NOT_STICKY
             }
             ACTION_RECONFIGURE -> reconfigureUpstream()
             else -> {
+                // Android restarts a sticky service with a null intent after a process kill.
+                // Do not resurrect the engine if the last user choice was to stop it.
+                if (intent == null && !LocalProxySettingsStore(this).shouldRestoreAfterUpdate()) {
+                    Log.i(TAG, "Skipping sticky restart: local proxy is disabled by the user.")
+                    stopSelf(startId)
+                    return START_NOT_STICKY
+                }
                 persistRestoreAfterUpdate(true)
                 startProxy()
             }
         }
-        return START_NOT_STICKY
+        // Let Android restore the foreground listener after a system process kill.
+        // This does not bypass user force-stop or manufacturer battery restrictions.
+        return START_STICKY
     }
 
     private fun persistRestoreAfterUpdate(enabled: Boolean) {
