@@ -2,16 +2,16 @@
 
 <p align="center"><a href="https://github.com/sergeyrenamed-coder/TGU-Public/releases"><img src="assets/readme/01-hero.jpg" alt="TGU Public: Telegram Unlocker, открытый исходный код, Android и Windows" width="100%" /></a></p>
 
-<p align="center"><a href="https://github.com/sergeyrenamed-coder/TGU-Public/releases"><img src="assets/readme/readme-status.svg" alt="Android 0.9.4 · Windows 0.3.0 · предварительные сборки" width="100%" /></a></p>
+<p align="center"><a href="https://github.com/sergeyrenamed-coder/TGU-Public/releases"><img src="assets/readme/readme-status.svg" alt="Android 0.9.6 · Windows 0.3.1 · предварительные сборки" width="100%" /></a></p>
 
 <p align="center"><a href="docs/TGU-Public-Details.md"><img src="assets/readme/02-features.jpg" alt="Возможности TGU: диагностика, каталог прокси, автовыбор, переключение, MTProto и SOCKS5" width="100%" /></a></p>
 
 <p align="center"><a href="https://github.com/sergeyrenamed-coder/TGU-Public/releases"><img src="assets/readme/03-downloads.jpg" alt="Загрузки TGU: Android APK, Windows EXE, исходный код" width="100%" /></a></p>
 
 <p align="center">
-<a href="https://github.com/sergeyrenamed-coder/TGU-Public/releases/download/android-v0.9.4/TGU-Android-v0.9.4-debug.apk" title="Скачать Android APK v0.9.4" aria-label="Скачать Android APK v0.9.4"><img src="assets/readme/cta-android.svg" width="31%" alt="Скачать Android APK v0.9.4" /></a>
+<a href="https://github.com/sergeyrenamed-coder/TGU-Public/releases/download/android-v0.9.6/TGU-Android-v0.9.6-debug.apk" title="Скачать Android APK v0.9.6" aria-label="Скачать Android APK v0.9.6"><img src="assets/readme/cta-android.svg" width="31%" alt="Скачать Android APK v0.9.6" /></a>
 &nbsp;
-<a href="https://github.com/sergeyrenamed-coder/TGU-Public/releases/download/windows-v0.3.0/TGU-Desktop-v0.3.0-portable.exe" title="Скачать Windows EXE v0.3.0" aria-label="Скачать Windows EXE v0.3.0"><img src="assets/readme/cta-windows.svg" width="31%" alt="Скачать Windows EXE v0.3.0" /></a>
+<a href="https://github.com/sergeyrenamed-coder/TGU-Public/releases/download/windows-v0.3.1/TGU-Desktop-v0.3.1-portable.exe" title="Скачать Windows EXE v0.3.1" aria-label="Скачать Windows EXE v0.3.1"><img src="assets/readme/cta-windows.svg" width="31%" alt="Скачать Windows EXE v0.3.1" /></a>
 &nbsp;
 <a href="https://github.com/sergeyrenamed-coder/TGU-Public/tree/main" title="Исходный код TGU" aria-label="Исходный код TGU"><img src="assets/readme/cta-source.svg" width="31%" alt="Исходный код TGU" /></a>
 </p>
