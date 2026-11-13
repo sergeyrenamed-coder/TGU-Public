@@ -18,7 +18,7 @@ concurrency:
 
 jobs:
   android:
-    name: Build Android 0.9.4
+    name: Build Android 0.9.5
     runs-on: ubuntu-latest
     timeout-minutes: 45
     defaults:
@@ -47,25 +47,48 @@ jobs:
         with:
           gradle-version: "8.13"
 
+      - name: Require persistent Android signing for published APK
+        env:
+          TGU_DEBUG_KEYSTORE_BASE64: ${{ secrets.TGU_DEBUG_KEYSTORE_BASE64 }}
+          TGU_DEBUG_KEYSTORE_PASSWORD: ${{ secrets.TGU_DEBUG_KEYSTORE_PASSWORD }}
+        shell: bash
+        run: |
+          if [[ -z "$TGU_DEBUG_KEYSTORE_BASE64" || -z "$TGU_DEBUG_KEYSTORE_PASSWORD" ]]; then
+            echo "::error::TGU release signing secrets are missing. Refusing to publish an APK signed with an ephemeral runner key."
+            echo "::error::Configure repository secrets TGU_DEBUG_KEYSTORE_BASE64 and TGU_DEBUG_KEYSTORE_PASSWORD with the SAME persistent key across releases."
+            exit 1
+          fi
+          key_path="$RUNNER_TEMP/tgu-release-debug.jks"
+          printf '%s' "$TGU_DEBUG_KEYSTORE_BASE64" | base64 --decode > "$key_path"
+          [[ -s "$key_path" ]] || { echo "::error::Decoded keystore is empty"; exit 1; }
+          echo "TGU_DEBUG_KEYSTORE_PATH=$key_path" >> "$GITHUB_ENV"
+          echo "TGU_DEBUG_KEYSTORE_PASSWORD=$TGU_DEBUG_KEYSTORE_PASSWORD" >> "$GITHUB_ENV"
+          # Do not print the keystore, password, or any private key material.
+
       - name: Build APK and run unit tests
         run: gradle --no-daemon --stacktrace :app:assembleDebug :app:testDebugUnitTest
+
+      - name: Verify signed release APK
+        run: |
+          apksigner verify --verbose --print-certs app/build/outputs/apk/debug/app-debug.apk
+          keytool -list -keystore "$TGU_DEBUG_KEYSTORE_PATH" -storepass "$TGU_DEBUG_KEYSTORE_PASSWORD" -alias tgu-debug > /dev/null
 
       - name: Prepare release asset
         shell: bash
         run: |
           mkdir -p "$RUNNER_TEMP/release"
-          cp app/build/outputs/apk/debug/app-debug.apk "$RUNNER_TEMP/release/TGU-Android-v0.9.4-debug.apk"
+          cp app/build/outputs/apk/debug/app-debug.apk "$RUNNER_TEMP/release/TGU-Android-v0.9.5-debug.apk"
 
       - name: Upload Android release asset
         uses: actions/upload-artifact@v4
         with:
           name: release-android
-          path: ${{ runner.temp }}/release/TGU-Android-v0.9.4-debug.apk
+          path: ${{ runner.temp }}/release/TGU-Android-v0.9.5-debug.apk
           if-no-files-found: error
           retention-days: 3
 
   windows:
-    name: Build Windows 0.3.0
+    name: Build Windows 0.3.1
     runs-on: windows-latest
     timeout-minutes: 60
     defaults:
@@ -118,19 +141,19 @@ jobs:
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force -Path "$env:RUNNER_TEMP/release" | Out-Null
-          Copy-Item "src-tauri/target/release/tgu-desktop.exe" "$env:RUNNER_TEMP/release/TGU-Desktop-v0.3.0-portable.exe"
+          Copy-Item "src-tauri/target/release/tgu-desktop.exe" "$env:RUNNER_TEMP/release/TGU-Desktop-v0.3.1-portable.exe"
 
       - name: Upload Windows release asset
         uses: actions/upload-artifact@v4
         with:
           name: release-windows
-          path: ${{ runner.temp }}/release/TGU-Desktop-v0.3.0-portable.exe
+          path: ${{ runner.temp }}/release/TGU-Desktop-v0.3.1-portable.exe
           if-no-files-found: error
           retention-days: 3
 
-  publish:
-    name: Publish GitHub Releases
-    needs: [android, windows]
+  publish-android:
+    name: Publish Android prerelease
+    needs: android
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -141,36 +164,46 @@ jobs:
           name: release-android
           path: release-android
 
+      - name: Publish Android prerelease
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: android-v0.9.5
+          target_commitish: ${{ github.sha }}
+          name: TGU Android 0.9.5
+          prerelease: true
+          make_latest: false
+          body: |
+            Android public test build for TGU 0.9.5.
+
+            Signed with the persistent project debug keystore to support in-place
+            updates on devices previously using that certificate. Existing
+            installations signed by a DIFFERENT certificate cannot be updated
+            without the original key and will require a one-time reinstall.
+          files: release-android/TGU-Android-v0.9.5-debug.apk
+
+  publish-windows:
+    name: Publish Windows prerelease
+    needs: windows
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
       - name: Download Windows asset
         uses: actions/download-artifact@v4
         with:
           name: release-windows
           path: release-windows
 
-      - name: Publish Android prerelease
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: android-v0.9.4
-          target_commitish: ${{ github.sha }}
-          name: TGU Android 0.9.4
-          prerelease: true
-          make_latest: false
-          body: |
-            Android public test build for TGU 0.9.4.
-
-            The attached APK is a debug-signed build. It is provided for testing and is not a production-signed Play Store package. A fresh install may be required when the debug signing key differs from a previously installed build.
-          files: release-android/TGU-Android-v0.9.4-debug.apk
-
       - name: Publish Windows prerelease
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: windows-v0.3.0
+          tag_name: windows-v0.3.1
           target_commitish: ${{ github.sha }}
-          name: TGU Desktop 0.3.0
+          name: TGU Desktop 0.3.1
           prerelease: true
           make_latest: false
           body: |
-            Windows portable public test build for TGU Desktop 0.3.0.
-
-            The executable is portable and currently unsigned. Windows may show its standard unknown-publisher warning.
-          files: release-windows/TGU-Desktop-v0.3.0-portable.exe
+            Windows portable public test build for TGU Desktop 0.3.1.
+            The executable remains portable and unsigned by a Windows code
+            signing certificate. Windows may warn about an unknown publisher.
+          files: release-windows/TGU-Desktop-v0.3.1-portable.exe
