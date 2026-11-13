@@ -61,14 +61,17 @@ jobs:
             printf '%s' "$TGU_DEBUG_KEYSTORE_BASE64" | base64 --decode > "$key_path"
             echo "TGU_DEBUG_KEYSTORE_PATH=$key_path" >> "$GITHUB_ENV"
             echo "TGU_DEBUG_KEYSTORE_PASSWORD=$TGU_DEBUG_KEYSTORE_PASSWORD" >> "$GITHUB_ENV"
+            echo "TGU_PERSISTENT_DEBUG_SIGNING=true" >> "$GITHUB_ENV"
           else
-            echo "Persistent signing secrets are not configured; using a temporary debug key."
+            echo "::warning::Persistent signing is not configured: this CI build will not be distributed as an installable APK. Configure TGU_DEBUG_KEYSTORE_BASE64 and TGU_DEBUG_KEYSTORE_PASSWORD."
+            echo "TGU_PERSISTENT_DEBUG_SIGNING=false" >> "$GITHUB_ENV"
           fi
 
       - name: Build APK and run unit tests
         run: gradle --no-daemon --stacktrace :app:assembleDebug :app:testDebugUnitTest
 
-      - name: Upload debug APK
+      - name: Upload debug APK (persistent signing only)
+        if: env.TGU_PERSISTENT_DEBUG_SIGNING == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: TGU-Android-debug-${{ github.sha }}
