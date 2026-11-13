@@ -688,6 +688,7 @@ private fun AccountScreen(
     var busyDeviceId by remember { mutableStateOf<String?>(null) }
     var pendingRevokeDevice by remember { mutableStateOf<com.rnmd.tgu.account.RnmdDevice?>(null) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
+    var appLinkTrouble by remember { mutableStateOf(false) }
     var refreshCounter by remember { mutableStateOf(0) }
 
     LaunchedEffect(session?.accessToken, session?.user?.id, refreshCounter) {
@@ -738,14 +739,32 @@ private fun AccountScreen(
                     if (authStatus is SessionStatus.RefreshFailure) {
                         Text("Сессия истекла или не обновилась. Войди снова.", color = TguMuted, fontSize = 10.sp)
                     }
-                    errorMessage?.let { Text(it, color = TguRed, fontSize = 10.sp) }
+                    errorMessage?.let { Text(it, color = TguRed, fontSize = 10.sp, lineHeight = 15.sp) }
+                    if (appLinkTrouble) {
+                        OutlinedButton(
+                            onClick = {
+                                try {
+                                    TelegramNativeLogin.openAppLinkSettings(context)
+                                } catch (_: Exception) {
+                                    errorMessage = "Открой Настройки Android → TGU → Открывать по умолчанию."
+                                }
+                            },
+                            modifier = Modifier.fillMaxWidth().height(44.dp),
+                        ) {
+                            Text("НАСТРОИТЬ ССЫЛКИ TGU", fontSize = 10.sp)
+                        }
+                    }
                     Button(
                         onClick = {
                             scope.launch {
                                 loginBusy = true
                                 errorMessage = null
+                                appLinkTrouble = false
                                 try {
                                     TelegramNativeLogin.start(context)
+                                } catch (exception: TelegramNativeLogin.AppLinkUnavailableException) {
+                                    appLinkTrouble = true
+                                    errorMessage = exception.message
                                 } catch (exception: Exception) {
                                     errorMessage = exception.message ?: "Не удалось открыть нативный вход Telegram."
                                 } finally {
