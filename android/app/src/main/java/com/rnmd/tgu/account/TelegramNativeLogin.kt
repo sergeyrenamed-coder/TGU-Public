@@ -3,7 +3,11 @@ package com.rnmd.tgu.account
 import android.app.Activity
 import android.content.Context
 import android.content.Intent
+import android.content.pm.verify.domain.DomainVerificationManager
+import android.content.pm.verify.domain.DomainVerificationUserState
 import android.net.Uri
+import android.os.Build
+import android.provider.Settings
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
 import android.util.Base64
@@ -38,6 +42,52 @@ import kotlinx.coroutines.withContext
 object TelegramNativeLogin {
     const val CLIENT_ID = "9135700460"
     const val REDIRECT_URI = "https://app2482922030-login.tg.dev/tglogin"
+    private const val REDIRECT_HOST = "app2482922030-login.tg.dev"
+
+    /**
+     * When the signing certificate configured in Telegram's Native App registration
+     * differs from the installed APK, Android sends the HTTPS OAuth callback to a
+     * browser instead of returning to TGU. Explain the problem before login.
+     */
+    class AppLinkUnavailableException(message: String) : IOException(message)
+
+    fun openAppLinkSettings(context: Context) {
+        val intent = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            Intent(Settings.ACTION_APP_OPEN_BY_DEFAULT_SETTINGS)
+                .setData(Uri.parse("package:${context.packageName}"))
+        } else {
+            Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS)
+                .setData(Uri.parse("package:${context.packageName}"))
+        }
+        if (context !is Activity) intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        context.startActivity(intent)
+    }
+
+    private fun ensureAppLinkCanReturn(context: Context) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return
+
+        val state = try {
+            context.getSystemService(DomainVerificationManager::class.java)
+                ?.getDomainVerificationUserState(context.packageName)
+        } catch (_: Exception) {
+            // Some OEM builds do not expose verification state reliably.
+            // Do not break otherwise working native login on those devices.
+            return
+        } ?: return
+
+        val hostState = state.hostToStateMap[REDIRECT_HOST]
+        val allowed = state.isLinkHandlingAllowed &&
+            (hostState == DomainVerificationUserState.DOMAIN_STATE_VERIFIED ||
+                hostState == DomainVerificationUserState.DOMAIN_STATE_SELECTED)
+        if (!allowed) {
+            throw AppLinkUnavailableException(
+                "Android не открывает ссылку возврата Telegram в TGU. " +
+                    "Разреши поддерживаемые ссылки TGU в настройках. " +
+                    "Если не помогло, обнови SHA-256 сертификата Android в BotFather " +
+                    "(Login Widget → Native App), затем повтори проверку ссылок."
+            )
+        }
+    }
     private const val EDGE_FUNCTION_URL =
         "${RnmdIdClient.SUPABASE_URL}/functions/v1/telegram-native-login"
     private const val SUPABASE_ID_TOKEN_GRANT =
@@ -55,6 +105,9 @@ object TelegramNativeLogin {
     }
 
     suspend fun start(context: Context) {
+        // Check before storing a PKCE verifier or launching Telegram: an unverified
+        // app link can otherwise strand the user on the tg.dev callback webpage.
+        ensureAppLinkCanReturn(context)
         val verifier = generateVerifier()
         val challenge = generateChallenge(verifier)
         PendingVerifierStore.save(context.applicationContext, verifier)
