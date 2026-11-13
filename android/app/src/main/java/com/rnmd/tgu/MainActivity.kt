@@ -703,7 +703,7 @@ private fun AccountScreen(
         errorMessage = null
         try {
             snapshot = withContext(Dispatchers.IO) {
-                repository.registerCurrentDevice(currentSession.accessToken, "0.9.4")
+                repository.registerCurrentDevice(currentSession.accessToken, "0.9.5")
                 repository.loadAccount(currentSession.accessToken, userId)
             }
         } catch (_: Exception) {
@@ -938,7 +938,7 @@ private fun AccountScreen(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text("О приложении", Modifier.weight(1f), color = TguText, fontSize = 12.sp)
-                Text("TGU 0.9.4 · RNMDTEAM", color = TguMuted, fontSize = 9.sp)
+                Text("TGU 0.9.5 · RNMDTEAM", color = TguMuted, fontSize = 9.sp)
             }
         }
     }
@@ -1260,7 +1260,7 @@ private fun SettingsScreen(
                 Box(Modifier.fillMaxWidth().height(1.dp).background(TguStroke))
                 SettingsOptionRow("Диагностика", "Проверка пути до Telegram DC", "⌁", onDiagnostics)
                 Box(Modifier.fillMaxWidth().height(1.dp).background(TguStroke))
-                SettingsOptionRow("О приложении", "TGU 0.9.4 · RNMDTEAM", "ⓘ", null)
+                SettingsOptionRow("О приложении", "TGU 0.9.5 · RNMDTEAM", "ⓘ", null)
             }
         }
 
@@ -1318,7 +1318,7 @@ private fun SettingsScreen(
                 Text("TGU · Telegram Unlocker", color = TguMuted, fontSize = 10.sp)
                 Text("RNMDTEAM / ANDROID", color = TguMuted, fontSize = 8.sp, fontFamily = FontFamily.Monospace)
             }
-            Text("0.9.4", color = TguText, fontSize = 11.sp, fontFamily = FontFamily.Monospace)
+            Text("0.9.5", color = TguText, fontSize = 11.sp, fontFamily = FontFamily.Monospace)
         }
     }
 }
