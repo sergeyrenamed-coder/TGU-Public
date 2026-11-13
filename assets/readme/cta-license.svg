@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="600" height="146" viewBox="0 0 600 146" role="img" aria-label="APACHE 2.0 — Условия лицензии">
+<defs><linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#333640"/><stop offset=".50" stop-color="#15181f"/><stop offset="1" stop-color="#08090c"/></linearGradient><linearGradient id="edge" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#f6f7fa" stop-opacity=".9"/><stop offset=".55" stop-color="#737783" stop-opacity=".50"/><stop offset="1" stop-color="#b8c0cd" stop-opacity=".7"/></linearGradient></defs>
+<rect x="6" y="5" width="588" height="136" rx="24" fill="url(#bg)" stroke="url(#edge)" stroke-width="2"/>
+<path d="M22 14H577" stroke="#ffffff" stroke-opacity=".34" stroke-width="2"/>
+<g transform="translate(24 19)" stroke="#f8faff" fill="none" stroke-width="5"><path d="M55 9L82 23V50Q82 75 55 94Q27 75 27 50V23Z"/><path d="M40 50L50 62L71 41" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/></g>
+<path d="M143 27V119" stroke="#fff" stroke-opacity=".47" stroke-width="2"/>
+<text x="161" y="69" fill="#fff" font-family="Segoe UI,Arial,sans-serif" font-size="36" font-weight="700">APACHE 2.0</text>
+<text x="163" y="106" fill="#bfc7d2" font-family="Segoe UI,Arial,sans-serif" font-size="23">Условия лицензии</text>
+</svg>

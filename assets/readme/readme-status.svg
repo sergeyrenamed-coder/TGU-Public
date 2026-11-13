@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1800" height="120" viewBox="0 0 1800 120" role="img" aria-label="Android 0.9.4 · Windows 0.3.0 · предварительный релиз">
+<defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="0"><stop stop-color="#0d1016"/><stop offset=".5" stop-color="#23252d"/><stop offset="1" stop-color="#0d1016"/></linearGradient></defs>
+<rect x="7" y="8" width="1786" height="103" rx="24" fill="url(#g)" stroke="#747986" stroke-opacity=".75" stroke-width="2"/>
+<g font-family="Segoe UI,Arial,sans-serif" font-weight="700" font-size="38" fill="#ffffff"><text x="82" y="75">● ANDROID 0.9.4</text><text x="644" y="75">● WINDOWS 0.3.0</text><text x="1210" y="75">◌ ТЕСТОВЫЕ СБОРКИ</text></g>
+<path d="M578 27V93M1143 27V93" stroke="#afb4bd" stroke-opacity=".45" stroke-width="2"/></svg>

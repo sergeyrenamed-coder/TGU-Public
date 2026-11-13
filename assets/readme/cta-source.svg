@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="600" height="146" viewBox="0 0 600 146" role="img" aria-label="ИСХОДНЫЙ КОД — Android + Desktop">
+<defs><linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#333640"/><stop offset=".50" stop-color="#15181f"/><stop offset="1" stop-color="#08090c"/></linearGradient><linearGradient id="edge" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#f6f7fa" stop-opacity=".9"/><stop offset=".55" stop-color="#737783" stop-opacity=".50"/><stop offset="1" stop-color="#b8c0cd" stop-opacity=".7"/></linearGradient></defs>
+<rect x="6" y="5" width="588" height="136" rx="24" fill="url(#bg)" stroke="url(#edge)" stroke-width="2"/>
+<path d="M22 14H577" stroke="#ffffff" stroke-opacity=".34" stroke-width="2"/>
+<g transform="translate(24 19)" stroke="#f8faff" fill="none" stroke-width="5"><path d="M41 27L16 53L41 80M69 27L94 53L69 80M63 15L47 92" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/></g>
+<path d="M143 27V119" stroke="#fff" stroke-opacity=".47" stroke-width="2"/>
+<text x="161" y="69" fill="#fff" font-family="Segoe UI,Arial,sans-serif" font-size="36" font-weight="700">ИСХОДНЫЙ КОД</text>
+<text x="163" y="106" fill="#bfc7d2" font-family="Segoe UI,Arial,sans-serif" font-size="23">Android + Desktop</text>
+</svg>

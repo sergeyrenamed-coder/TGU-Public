@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1800" height="135" viewBox="0 0 1800 135" role="img" aria-label="Важно: TGU — локальный прокси для Telegram, а не системный VPN. Работа прокси зависит от сети.">
+<defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="0"><stop stop-color="#1b1d24"/><stop offset=".5" stop-color="#101318"/><stop offset="1" stop-color="#1b1d24"/></linearGradient></defs>
+<rect x="5" y="7" width="1790" height="122" rx="24" fill="url(#g)" stroke="#a0a4ac" stroke-opacity=".7" stroke-width="2"/>
+<path d="M64 98L111 22L159 98Z" stroke="#ffffff" stroke-width="6" fill="none" stroke-linejoin="round"/>
+<path d="M111 48V70" stroke="#ffffff" stroke-width="7" stroke-linecap="round"/><circle cx="111" cy="82" r="4" fill="#ffffff"/>
+<text x="191" y="62" font-family="Segoe UI,Arial,sans-serif" font-weight="700" font-size="34" fill="#fff">TGU — локальный прокси для Telegram, не системный VPN.</text>
+<text x="193" y="105" font-family="Segoe UI,Arial,sans-serif" font-size="30" fill="#bfc4cf">Доступность прокси зависит от вашей сети и выбранного сервера.</text></svg>
