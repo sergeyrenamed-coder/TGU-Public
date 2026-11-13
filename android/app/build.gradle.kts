@@ -20,8 +20,8 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         minSdk = 26
         targetSdk = 36
-        versionCode = 23
-        versionName = "0.9.4"
+        versionCode = 24
+        versionName = "0.9.5"
         buildConfigField("String", "TGU_COMMUNITY_API_BASE_URL", "\"$tguCommunityApiBaseUrl\"")
     }
 
