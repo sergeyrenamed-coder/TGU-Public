@@ -24,6 +24,23 @@ The Android Native Login App Link is separate from that Supabase callback.
 
 The registered package name and SHA-256 signing fingerprint must match the APK. CI verifies that the APK uses the persistent TGU signing certificate before publishing it.
 
+**IMPORTANT after the Android signing key change:** The fingerprint pinned for TGU Android 0.9.5+ is:
+
+```text
+16:DD:84:A2:36:98:8D:08:EA:13:6B:2F:0F:6D:1A:C4:03:7C:01:2F:BC:1C:9E:1E:F1:94:3A:21:85:A9:B3:C7
+```
+
+Update the Android Native App entry in **@BotFather → select RNMD bot → Bot Settings → Login Widget → Native Apps** to use this SHA-256 fingerprint for `com.rnmd.tgu`. A key change does not update Telegram's app registration automatically. Do not delete/re-create the entry without checking its generated `app...-login.tg.dev` callback URL; if Telegram changes the callback host, update the Android manifest, `TelegramNativeLogin.REDIRECT_URI` and `telegram-native-login` Edge Function together. The Android app and server **must use the same redirect URI**.
+
+For Android 12+, check that **Settings → Apps → TGU → Open by default → Open supported links** is enabled. Android will otherwise send the Telegram callback to the web browser. After updating the fingerprint in BotFather, re-install/update TGU or reverify App Links with a connected computer:
+
+```bash
+adb shell pm verify-app-links --re-verify com.rnmd.tgu
+adb shell pm get-app-links com.rnmd.tgu
+```
+
+The Telegram callback domain should show `verified` or be explicitly approved by the user. The app now checks this state on Android 12+ before starting Telegram login and offers an "Настроить ссылки TGU" shortcut when return links are not enabled. A successful Android build alone does not prove that a phone has reverified the Telegram-hosted association.
+
 ## Supabase custom OIDC provider
 
 The existing Supabase provider is retained:
@@ -67,7 +84,7 @@ The Edge Function has two fixed actions (`start` and `finish`). It accepts no ar
 
 ## First sign-in test
 
-1. Install TGU 0.9.2.
+1. Install a TGU 0.9.5+ APK signed with the permanent test signing key.
 2. Start TGU and open the Account tab.
 3. Tap **Continue with Telegram**.
 4. Telegram should open its native login/consent screen rather than an external browser.
