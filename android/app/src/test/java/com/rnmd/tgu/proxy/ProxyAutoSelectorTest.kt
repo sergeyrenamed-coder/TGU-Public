@@ -82,10 +82,70 @@ class ProxyAutoSelectorTest {
         assertEquals(0, result.firstPassAvailable)
     }
 
+
+    @Test
+    fun trustedCommunityCandidatesAreCheckedFirstAndVerifiedLocally() = runBlocking {
+        val calls = ConcurrentHashMap<String, AtomicInteger>()
+        val entries = (1..30).map { candidate("ordinary-$it") } + candidate(
+            "trusted", communityReports = 20, communityUniqueReporters = 5,
+            communitySuccessRate = 95.0, communityMedianRttMs = 65L,
+        )
+
+        val result = ProxyAutoSelector(probe = { profile, _, _ ->
+            calls.computeIfAbsent(profile.id) { AtomicInteger() }.incrementAndGet()
+            success(55)
+        }).findBest(entries)
+
+        assertEquals("trusted", result.selected?.profile?.id)
+        assertEquals(1, result.totalCandidates)
+        assertEquals(3, calls["trusted"]?.get())
+        assertEquals(1, calls.size)
+        assertFalse(ProxyAutoSelectionRuntime.state.value.isRunning)
+    }
+
+    @Test
+    fun failedCommunityPriorityFallsBackToOriginalFullCatalog() = runBlocking {
+        val calls = ConcurrentHashMap<String, AtomicInteger>()
+        val entries = listOf(
+            candidate("trusted", communityReports = 30, communityUniqueReporters = 5,
+                communitySuccessRate = 99.0),
+            candidate("ordinary"),
+        )
+        val result = ProxyAutoSelector(probe = { profile, _, _ ->
+            calls.computeIfAbsent(profile.id) { AtomicInteger() }.incrementAndGet()
+            if (profile.id == "trusted") failure() else success(45)
+        }).findBest(entries)
+
+        assertEquals("ordinary", result.selected?.profile?.id)
+        assertEquals(2, result.totalCandidates)
+        assertEquals(3, calls["ordinary"]?.get())
+        assertFalse(ProxyAutoSelectionRuntime.state.value.isRunning)
+    }
+
+    @Test
+    fun weakCommunitySignalsDoNotBypassFullCatalog() = runBlocking {
+        val calls = ConcurrentHashMap<String, AtomicInteger>()
+        val entries = listOf(
+            candidate("weak", communityReports = 1, communityUniqueReporters = 1,
+                communitySuccessRate = 100.0),
+            candidate("normal"),
+        )
+        ProxyAutoSelector(probe = { profile, _, _ ->
+            calls.computeIfAbsent(profile.id) { AtomicInteger() }.incrementAndGet()
+            success(if (profile.id == "normal") 10 else 100)
+        }).findBest(entries)
+        assertEquals(3, calls["normal"]?.get())
+        assertEquals(3, calls["weak"]?.get())
+    }
+
     private fun candidate(
         id: String,
         supported: Boolean = true,
         stale: Boolean = false,
+        communityReports: Int = 0,
+        communityUniqueReporters: Int = 0,
+        communitySuccessRate: Double? = null,
+        communityMedianRttMs: Long? = null,
         profile: ProxyProfile? = ProxyProfile(
             id = id,
             name = "Test $id",
@@ -101,6 +161,10 @@ class ProxyAutoSelectorTest {
         profile = profile,
         supported = supported,
         stale = stale,
+        communityReports = communityReports,
+        communityUniqueReporters = communityUniqueReporters,
+        communitySuccessRate = communitySuccessRate,
+        communityMedianRttMs = communityMedianRttMs,
     )
 
     private fun success(latencyMs: Long) = ProxyTestResult(

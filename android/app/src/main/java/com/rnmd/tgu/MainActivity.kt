@@ -1279,7 +1279,7 @@ private fun SettingsScreen(
                 Box(Modifier.fillMaxWidth().height(1.dp).background(TguStroke))
                 SettingsOptionRow("Диагностика", "Проверка пути до Telegram DC", "⌁", onDiagnostics)
                 Box(Modifier.fillMaxWidth().height(1.dp).background(TguStroke))
-                SettingsOptionRow("О приложении", "TGU 0.9.6 · RNMDTEAM", "ⓘ", null)
+                SettingsOptionRow("О приложении", "TGU 0.9.7 RC1 · RNMDTEAM", "ⓘ", null)
             }
         }
 
@@ -1298,7 +1298,7 @@ private fun SettingsScreen(
                     Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         Text("Помогать улучшать каталог", color = TguText, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
                         Text(
-                            "Отправлять анонимные результаты сканирования, чтобы ускорять подбор другим пользователям. Без IP и данных Telegram.",
+                            "По вашему согласию отправлять результаты проверок, задержку, тип сети и случайный ID установки. Без Telegram ID и сообщений; сервер видит IP соединения.",
                             color = TguMuted, fontSize = 9.sp, lineHeight = 14.sp,
                         )
                     }
