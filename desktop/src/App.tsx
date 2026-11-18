@@ -39,6 +39,7 @@ type ProxySummary = {
   supported: boolean; unsupported_reason: string | null;
   community_reports: number; community_unique_reporters: number;
   community_success_rate: number | null; community_median_rtt_ms: number | null;
+  ru_verified: boolean; ru_rtt_ms: number | null;
 };
 type CatalogResponse = {
   count: number; generated_at: string; source: string; from_cache: boolean;
@@ -727,6 +728,8 @@ function App() {
       return matchesType && matchesStatus && matchesSearch;
     }).sort((a, b) => {
       if (a.supported !== b.supported) return a.supported ? -1 : 1;
+      if (a.ru_verified !== b.ru_verified) return a.ru_verified ? -1 : 1;
+      if (a.ru_verified && b.ru_verified) return (a.ru_rtt_ms ?? Infinity) - (b.ru_rtt_ms ?? Infinity);
       return (a.source_rtt_ms ?? Number.MAX_SAFE_INTEGER) - (b.source_rtt_ms ?? Number.MAX_SAFE_INTEGER);
     });
   }, [catalog, search, typeFilter, statusFilter, testResults]);
@@ -819,13 +822,13 @@ function App() {
             <button className={statusFilter === "failed" ? "filter-chip active" : "filter-chip"} onClick={() => { setStatusFilter(statusFilter === "failed" ? "all" : "failed"); setVisibleCount(60); }}>Недоступные</button>
             <button className={statusFilter === "unsupported" ? "filter-chip active" : "filter-chip"} onClick={() => { setStatusFilter(statusFilter === "unsupported" ? "all" : "unsupported"); setVisibleCount(60); }}>Не поддерживаются</button>
           </div>
-          <div className="catalog-list-heading"><span>{filteredProxies.length.toLocaleString("ru-RU")} ПРОКСИ</span><span>ЗАДЕРЖКА ИЗ КАТАЛОГА · НЕ ЗАМЕНЯЕТ ЛОКАЛЬНУЮ ПРОВЕРКУ</span></div>
+          <div className="catalog-list-heading"><span>{filteredProxies.length.toLocaleString("ru-RU")} ПРОКСИ</span><span>RU VERIFIED · YANDEX CLOUD · НУЖНА ЛОКАЛЬНАЯ ПРОВЕРКА</span></div>
           {catalogLoading && !catalog ? <div className="empty-state"><LoaderCircle className="spin" size={22}/><b>Загружаю каталог</b><span>Получаю последнюю опубликованную версию каталога прокси TGU.</span></div> :
             visibleProxies.length === 0 ? <div className="empty-state"><Search size={22}/><b>Ничего не найдено</b><span>Измени поисковый запрос или обнови каталог.</span></div> :
             <div className="proxy-list">{visibleProxies.map(proxy => {
               const result = testResults[proxy.id]; const isTesting = !!testing[proxy.id]; const isConnecting = connecting === proxy.id;
               return <article className="proxy-card" key={proxy.id}>
-                <div className="proxy-card-main"><div className="proxy-identity"><span className="proxy-type">{proxy.protocol.toUpperCase()}</span><b>{proxy.server}:{proxy.port}</b><small>{proxy.country || "Страна неизвестна"}{proxy.source_tier ? ` · ${sourceTierLabel(proxy.source_tier)}` : ""}{proxy.community_unique_reporters >= 3 ? ` · Сообщество: ${proxy.community_success_rate ?? "—"}% / ${proxy.community_unique_reporters} устройств` : ""}</small></div>
+                <div className="proxy-card-main"><div className="proxy-identity"><span className="proxy-type">{proxy.protocol.toUpperCase()}</span><b>{proxy.server}:{proxy.port}</b><small>{proxy.country || "Страна неизвестна"}{proxy.ru_verified ? ` · RU Verified: ${proxy.ru_rtt_ms ?? "—"} мс (Yandex Cloud)` : ""}{proxy.source_tier ? ` · ${sourceTierLabel(proxy.source_tier)}` : ""}{proxy.community_unique_reporters >= 3 ? ` · Сообщество: ${proxy.community_success_rate ?? "—"}% / ${proxy.community_unique_reporters} устройств` : ""}</small></div>
                   <div className="proxy-meta"><div><span>ЗАДЕРЖКА ИСТОЧНИКА</span><b>{proxy.source_rtt_ms != null ? `${proxy.source_rtt_ms} мс` : "—"}</b></div><div><span>ВРЕМЯ РАБОТЫ</span><b>{proxy.uptime != null ? `${Math.round(proxy.uptime * 100)}%` : "—"}</b></div><div><span>ПРОВЕРОК</span><b>{proxy.checks ?? "—"}</b></div></div></div>
                 <div className="proxy-card-bottom">
                   <div className={result ? (result.success ? "proxy-test-state success" : "proxy-test-state error") : "proxy-test-state"}>
