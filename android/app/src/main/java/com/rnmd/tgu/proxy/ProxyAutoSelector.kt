@@ -139,9 +139,52 @@ class ProxyAutoSelector(
     private val onScanCompleted: (String, List<CommunityProxyProbeReport>) -> Unit = { _, _ -> },
 ) {
     suspend fun findBest(entries: List<FreedomCheckerProxy>): ProxyAutoSelectionResult {
+        // The public API already returns 24h aggregate statistics. Use them only
+        // to choose what to test first: no remote report is proof of reachability.
+        val preferred = entries.asSequence()
+            .filter {
+                it.supported && it.profile != null && !it.stale &&
+                    it.communityUniqueReporters >= MIN_COMMUNITY_REPORTERS &&
+                    it.communityReports >= MIN_COMMUNITY_REPORTS &&
+                    (it.communitySuccessRate ?: 0.0) >= MIN_COMMUNITY_SUCCESS_RATE
+            }
+            .sortedWith(
+                compareByDescending<FreedomCheckerProxy> { it.communitySuccessRate ?: 0.0 }
+                    .thenByDescending { it.communityUniqueReporters }
+                    .thenBy { it.communityMedianRttMs ?: Long.MAX_VALUE }
+                    .thenBy { it.serverRttMs ?: Long.MAX_VALUE }
+            )
+            .take(COMMUNITY_FAST_CANDIDATES)
+            .toList()
+
+        if (preferred.isNotEmpty()) {
+            // Do not publish failed quick-pass reports when a fallback full
+            // scan will repeat them. The completed scan reports once.
+            val fast = findBestInternal(preferred, publishFailureReports = false)
+            if (fast.selected != null) {
+                val totalSupported = entries.count { it.supported && it.profile != null && !it.stale }
+                val message = "Community Network: проверено ${fast.totalCandidates} из $totalSupported кандидатов; маршрут подтверждён локально."
+                ProxyAutoSelectionRuntime.complete(fast.selected.endpoint, fast.verifiedLatencyMs, message)
+                return fast.copy(message = message)
+            }
+        }
+        // Missing or unreliable community data must never block the usual scan.
+        return findBestInternal(entries, publishFailureReports = true)
+    }
+
+    private suspend fun findBestInternal(
+        entries: List<FreedomCheckerProxy>,
+        publishFailureReports: Boolean,
+    ): ProxyAutoSelectionResult {
         val startedAt = System.nanoTime()
         val scanId = UUID.randomUUID().toString()
         val communityReports = ConcurrentLinkedQueue<CommunityProxyProbeReport>()
+        fun publishReports() {
+            val completedReports = communityReports.toList()
+            if (completedReports.isNotEmpty()) {
+                runCatching { onScanCompleted(scanId, completedReports) }
+            }
+        }
         val candidates = entries
             .filter { it.supported && it.profile != null && !it.stale }
             .sortedWith(
@@ -220,13 +263,9 @@ class ProxyAutoSelector(
 
                                                                                     
                                                                                     
-            val completedReports = communityReports.toList()
-            if (completedReports.isNotEmpty()) {
-                runCatching { onScanCompleted(scanId, completedReports) }
-            }
-
             val firstPass = successes.sortedBy { it.result.elapsedMs }
             if (firstPass.isEmpty()) {
+                if (publishFailureReports) publishReports()
                 val message = "Доступных прокси не найдено. Проверь интернет или попробуй другую сеть."
                 ProxyAutoSelectionRuntime.complete(null, null, message)
                 return ProxyAutoSelectionResult(
@@ -270,6 +309,7 @@ class ProxyAutoSelector(
             )
             val elapsedMs = elapsed(startedAt)
             if (winner == null) {
+                if (publishFailureReports) publishReports()
                 val message = "Прокси отвечали нестабильно. Не применяю сервер, который не прошёл повторную проверку."
                 ProxyAutoSelectionRuntime.complete(null, null, message)
                 return ProxyAutoSelectionResult(
@@ -277,6 +317,7 @@ class ProxyAutoSelector(
                 )
             }
 
+            publishReports()
             val message = "Проверено ${candidates.size}; доступно ${available.get()}; лучший сервер подтвердил ${winner.successfulChecks}/3 проверок."
             ProxyAutoSelectionRuntime.complete(
                 endpoint = winner.entry.endpoint,
@@ -324,6 +365,10 @@ class ProxyAutoSelector(
         ((System.nanoTime() - startedAtNanos) / 1_000_000L).coerceAtLeast(0L)
 
     private companion object {
+        const val COMMUNITY_FAST_CANDIDATES = 20
+        const val MIN_COMMUNITY_REPORTERS = 3
+        const val MIN_COMMUNITY_REPORTS = 5
+        const val MIN_COMMUNITY_SUCCESS_RATE = 80.0
         const val MAX_PARALLEL = 24
         const val FINALISTS_COUNT = 5
         const val VERIFY_REPEATS = 2

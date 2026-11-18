@@ -28,6 +28,7 @@ class ProxyAutoMonitor(
             val repository = FreedomCheckerCatalogRepository(appContext)
             val profileStore = ProxyProfileStore(appContext)
             val upstreamStore = UpstreamProxySettingsStore(appContext)
+            val feedbackClient = TguCommunityFeedbackClient(appContext)
             var lastCatalogRefreshAt = 0L
             var activeProfileId: String? = null
             var failureStreak = 0
@@ -94,7 +95,7 @@ class ProxyAutoMonitor(
                 if (current == null) {
                     val candidate = if (now >= nextInitialSelectionAt) {
                         nextInitialSelectionAt = now + INITIAL_RETRY_DELAY_MS
-                        findHealthyCandidate(repository, null, failedProfileUntil.keys)
+                        findHealthyCandidate(repository, null, failedProfileUntil.keys, feedbackClient)
                     } else null
                     val profile = candidate?.profile
                     if (profile != null) {
@@ -187,6 +188,7 @@ class ProxyAutoMonitor(
                             repository = repository,
                             currentId = current.id,
                             excludedProfileIds = failedProfileUntil.keys,
+                            feedbackClient = feedbackClient,
                         )
                         val replacement = selection?.selected?.profile
                         if (replacement != null) {
@@ -263,7 +265,8 @@ class ProxyAutoMonitor(
         repository: FreedomCheckerCatalogRepository,
         currentId: String?,
         excludedProfileIds: Set<String> = emptySet(),
-    ): FreedomCheckerProxy? = findBestCandidate(repository, currentId, excludedProfileIds)?.selected
+        feedbackClient: TguCommunityFeedbackClient,
+    ): FreedomCheckerProxy? = findBestCandidate(repository, currentId, excludedProfileIds, feedbackClient)?.selected
 
        
                                                                                
@@ -274,6 +277,7 @@ class ProxyAutoMonitor(
         repository: FreedomCheckerCatalogRepository,
         currentId: String?,
         excludedProfileIds: Set<String> = emptySet(),
+        feedbackClient: TguCommunityFeedbackClient,
     ): ProxyAutoSelectionResult? {
         val snapshot = repository.cached() ?: try {
             repository.refresh()
@@ -288,7 +292,9 @@ class ProxyAutoMonitor(
                 it.id != currentId && it.id !in excludedProfileIds
         }
         return try {
-            ProxyAutoSelector().findBest(candidates)
+            ProxyAutoSelector(
+                onScanCompleted = { scanId, reports -> feedbackClient.submitScan(scanId, reports) },
+            ).findBest(candidates)
         } catch (cancelled: CancellationException) {
             throw cancelled
         } catch (error: Exception) {

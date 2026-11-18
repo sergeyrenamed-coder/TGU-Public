@@ -1,6 +1,8 @@
 package com.rnmd.tgu.proxy
 
 import android.content.Context
+import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
 import okhttp3.Call
 import okhttp3.Callback
 import okhttp3.MediaType.Companion.toMediaType
@@ -26,16 +28,19 @@ class TguCommunityFeedbackClient(context: Context) {
     private val appContext = context.applicationContext
     private val prefs = appContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
 
-    fun isEnabled(): Boolean {
-                                                                                       
-        if (!prefs.contains(KEY_ENABLED)) {
-            prefs.edit().putBoolean(KEY_ENABLED, true).apply()
-        }
-        return prefs.getBoolean(KEY_ENABLED, true)
-    }
+    // Legacy feedback_enabled=true was set silently by older versions.
+    // Never interpret it as consent: users must explicitly opt in again.
+    fun isEnabled(): Boolean = prefs.getBoolean(KEY_EXPLICIT_CONSENT, false)
 
     fun setEnabled(enabled: Boolean) {
-        prefs.edit().putBoolean(KEY_ENABLED, enabled).apply()
+        prefs.edit()
+            .putBoolean(KEY_EXPLICIT_CONSENT, enabled)
+            .remove(KEY_LEGACY_ENABLED)
+            .apply()
+        if (!enabled) {
+            // Cancel queued/in-flight feedback when consent is withdrawn.
+            CLIENT.dispatcher.cancelAll()
+        }
     }
 
     fun isConfigured(): Boolean = apiBaseUrl().isNotBlank()
@@ -61,7 +66,7 @@ class TguCommunityFeedbackClient(context: Context) {
                 .put("scan_id", scanId)
                 .put("client_platform", "android")
                 .put("app_version", com.rnmd.tgu.BuildConfig.VERSION_NAME)
-                .put("network_type", "unknown")
+                .put("network_type", currentNetworkType())
             val items = JSONArray()
             chunk.forEach { report ->
                 val item = JSONObject()
@@ -101,6 +106,20 @@ class TguCommunityFeedbackClient(context: Context) {
         }
     }
 
+    // Coarse transport class only: no operator, SSID, location or device model.
+    private fun currentNetworkType(): String {
+        val manager = appContext.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
+            ?: return "unknown"
+        val capabilities = manager.getNetworkCapabilities(manager.activeNetwork) ?: return "unknown"
+        return when {
+            capabilities.hasTransport(NetworkCapabilities.TRANSPORT_VPN) -> "unknown"
+            capabilities.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) -> "wifi"
+            capabilities.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR) -> "cellular"
+            capabilities.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET) -> "ethernet"
+            else -> "unknown"
+        }
+    }
+
     private fun apiBaseUrl(): String {
         val value = com.rnmd.tgu.BuildConfig.TGU_COMMUNITY_API_BASE_URL.trim().trimEnd('/')
         if (!value.startsWith("https://", ignoreCase = true)) return ""
@@ -110,7 +129,8 @@ class TguCommunityFeedbackClient(context: Context) {
     companion object {
         private const val TAG = "TGUCommunityFeedback"
         private const val PREFS = "tgu_community_feedback"
-        private const val KEY_ENABLED = "feedback_enabled"
+        private const val KEY_LEGACY_ENABLED = "feedback_enabled"
+        private const val KEY_EXPLICIT_CONSENT = "feedback_opt_in_v1"
         private const val KEY_INSTANCE_ID = "client_instance_id"
         private const val MAX_BATCH_SIZE = 100
         private val JSON_MEDIA_TYPE = "application/json; charset=utf-8".toMediaType()
