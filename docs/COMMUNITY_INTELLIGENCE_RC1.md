@@ -13,7 +13,7 @@ This is an **unreleased test branch**. No public GitHub Release should be create
 ## Scope and limitations
 
 - The first prototype uses **global 24-hour community aggregates**, not per-operator or per-device network matching. Do not claim it knows which proxy works for a particular provider.
-- It uses the existing RNMDSTORE Netlify Community API, backed by the TGU Proxy Directory catalog. If that API or its build-time URL is absent, GitHub Raw fallback remains available but no community fast path is activated.
+- It uses the existing RNMDSTORE Netlify Community API, backed by the TGU Proxy Directory catalog. Android CI supplies the public https://rnmdstore.netlify.app origin by default, or a configured TGU_COMMUNITY_API_BASE_URL Actions variable. If the API is unavailable or has no community stats, GitHub Raw fallback works as before and no community fast path is activated.
 - Background feedback does not start independent recurring scans. It only reports scans already performed by the existing selector.
 - Fast-pass failures are not uploaded twice when the subsequent full scan retests the same proxies.
 - Test branch versionCode 26 / versionName 0.9.7-rc1. The eventual production release must use a strictly higher versionCode.

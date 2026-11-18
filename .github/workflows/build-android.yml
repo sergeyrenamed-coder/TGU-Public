@@ -79,7 +79,9 @@ jobs:
           fi
 
       - name: Build APK and run unit tests
-        run: gradle --no-daemon --stacktrace :app:assembleDebug :app:testDebugUnitTest
+        env:
+          TGU_COMMUNITY_API_BASE_URL: ${{ vars.TGU_COMMUNITY_API_BASE_URL || 'https://rnmdstore.netlify.app' }}
+        run: gradle --no-daemon --stacktrace -PTGU_COMMUNITY_API_BASE_URL="$TGU_COMMUNITY_API_BASE_URL" :app:assembleDebug :app:testDebugUnitTest
 
       - name: Upload debug APK (persistent signing only)
         if: env.TGU_PERSISTENT_DEBUG_SIGNING == 'true'
