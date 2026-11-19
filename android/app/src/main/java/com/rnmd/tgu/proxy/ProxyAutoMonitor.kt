@@ -26,6 +26,9 @@ class ProxyAutoMonitor(
         job?.cancel()
         job = scope.launch(Dispatchers.IO) {
             val repository = FreedomCheckerCatalogRepository(appContext)
+            val warmPool = WarmStandbyPool()
+            var warmJob: Job? = null
+            var warmForId: String? = null
             val profileStore = ProxyProfileStore(appContext)
             val upstreamStore = UpstreamProxySettingsStore(appContext)
             var lastCatalogRefreshAt = 0L
@@ -89,6 +92,11 @@ class ProxyAutoMonitor(
                 if (current?.id != activeProfileId) {
                     activeProfileId = current?.id
                     failureStreak = 0
+                    if (warmForId != current?.id) {
+                        warmJob?.cancel()
+                        warmJob = null
+                        warmForId = null
+                    }
                 }
 
                 if (current == null) {
@@ -103,6 +111,11 @@ class ProxyAutoMonitor(
                             onProfileSelected(profile)
                             activeProfileId = profile.id
                             switchCount++
+                            warmJob?.cancel()
+                            warmForId = profile.id
+                            warmJob = launch {
+                                repository.cached()?.let { warmPool.scan(it.entries, profile.id) }
+                            }
                             ProxyMonitorRuntime.publish(
                                 ProxyMonitorSnapshot(
                                     enabled = true,
@@ -136,6 +149,13 @@ class ProxyAutoMonitor(
                         )
                     }
                 } else {
+                    if (warmForId != current.id) {
+                        warmJob?.cancel()
+                        warmForId = current.id
+                        warmJob = launch {
+                            repository.cached()?.let { warmPool.scan(it.entries, current.id) }
+                        }
+                    }
                     val check = runCatching { ProxyDiagnostics.check(current) }.getOrElse { error ->
                         ProxyTestResult(
                             success = false,
@@ -183,12 +203,13 @@ class ProxyAutoMonitor(
                                                                                    
                                                                                 
                         failedProfileUntil[current.id] = now + FAILED_PROFILE_COOLDOWN_MS
-                        val selection = findBestCandidate(
+                        val backup = warmPool.findValidBackup(failedProfileUntil.keys + current.id)
+                        val selection = if (backup == null) findBestCandidate(
                             repository = repository,
                             currentId = current.id,
                             excludedProfileIds = failedProfileUntil.keys,
-                        )
-                        val replacement = selection?.selected?.profile
+                        ) else null
+                        val replacement = backup?.profile ?: selection?.selected?.profile
                         if (replacement != null) {
                             try {
                                 persistAndActivate(profileStore, upstreamStore, replacement)
@@ -288,7 +309,8 @@ class ProxyAutoMonitor(
                 it.id != currentId && it.id !in excludedProfileIds
         }
         return try {
-            ProxyAutoSelector().findBest(candidates)
+            val selector = ProxyAutoSelector()
+            selector.findFirstVerifiedRu(candidates) ?: selector.findBest(candidates)
         } catch (cancelled: CancellationException) {
             throw cancelled
         } catch (error: Exception) {
