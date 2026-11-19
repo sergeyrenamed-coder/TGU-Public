@@ -747,7 +747,7 @@ function App() {
       <div className="window-controls" role="group" aria-label="Управление окном">
         <button type="button" className="window-control" aria-label="Свернуть окно" title="Свернуть" onClick={() => void getCurrentWindow().minimize().catch(() => setNotice({kind:"error",text:"Не удалось свернуть окно."}))}><Minus size={15}/></button>
         <button type="button" className="window-control" aria-label="Развернуть или восстановить окно" title="Развернуть / восстановить" onClick={() => void getCurrentWindow().toggleMaximize().catch(() => setNotice({kind:"error",text:"Не удалось изменить размер окна."}))}><Square size={13}/></button>
-        <button type="button" className="window-control close" aria-label="Свернуть TGU в системный трей" title="Скрыть в трей — TGU продолжит работать" onClick={() => void getCurrentWindow().close().catch(() => setNotice({kind:"error",text:"Не удалось закрыть окно."}))}><X size={17}/></button>
+        <button type="button" className="window-control close" aria-label="Свернуть TGU в системный трей" title="Скрыть в трей — TGU продолжит работать" onClick={() => void getCurrentWindow().hide().catch(() => setNotice({kind:"error",text:"Не удалось скрыть TGU в системный трей."}))}><X size={17}/></button>
       </div>
     </header>
     <div className="app-shell">
