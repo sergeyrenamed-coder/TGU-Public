@@ -879,6 +879,10 @@ async fn find_failover_candidate(
             .then_with(|| left.rtt_ms.unwrap_or(u64::MAX).cmp(&right.rtt_ms.unwrap_or(u64::MAX)))
     });
 
+    if let Some(candidate) = crate::warm_standby::verified_backup(&records, excluded_ids).await {
+        return Ok(Some(candidate));
+    }
+
     let semaphore = Arc::new(tokio::sync::Semaphore::new(FAILOVER_PARALLELISM));
     let mut probes = FuturesUnordered::new();
     for record in records {

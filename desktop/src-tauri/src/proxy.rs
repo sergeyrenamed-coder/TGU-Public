@@ -1107,6 +1107,62 @@ pub async fn engine_auto_select(
         });
     }
 
+    // Fast path: connect as soon as the first Russian-cloud candidate passes
+    // TWO independent Telegram DC checks on this computer. Then fill a warm
+    // backup pool in the background without touching the active upstream.
+    let fast_candidates: Vec<_> = records.iter()
+        .filter(|r| ru.contains_key(&r.id))
+        .take(12).cloned().collect();
+    for candidate in fast_candidates {
+        let mut timings = Vec::new();
+        let endpoint = auto_endpoint(&candidate);
+        start_auto_candidate(&app, &progress, &endpoint, false).await;
+        for _ in 0..2 {
+            let outcome = tokio::task::spawn_blocking({
+                let rec = candidate.clone();
+                move || run_proxy_test_with_timeouts(rec, VERIFY_CONNECT_TIMEOUT, VERIFY_IO_TIMEOUT)
+            }).await.map_err(|e| format!("Fast Connect check task: {e}"))?;
+            if !outcome.success { break; }
+            timings.push(outcome.elapsed_ms);
+        }
+        let ok = timings.len() == 2;
+        let probe_result = ProxyTestResult {
+            success: ok,
+            stage: "Fast Connect".into(),
+            detail: if ok { "Two local checks passed".into() } else { "Not reachable locally".into() },
+            elapsed_ms: timings.first().copied().unwrap_or_default(),
+        };
+        finish_auto_candidate(&app, &progress, &endpoint, &probe_result, false).await;
+        if ok {
+            let latency = timings.iter().copied().sum::<u64>() / timings.len() as u64;
+            let mut summary = summarize(&candidate);
+            summary.ru_verified = true;
+            summary.ru_rtt_ms = ru.get(&candidate.id).copied();
+            let saved = crate::profiles::save_catalog_profile(&app, &candidate)?;
+            state.select_upstream(saved.to_engine_upstream()).await?;
+            crate::profiles::set_selected_id(&app, Some(saved.id.clone()))?;
+            let count = progress.lock().await.completed;
+            let message = "Fast Connect: сервер RU Verified проверен локально; резервные узлы проверяются в фоне.".to_string();
+            set_auto_progress(&app, &progress, "Fast Connect — upstream готов", false, Some(message.clone())).await;
+            let _ = crate::profiles::history_append(
+                &app, &saved.endpoint(), &saved.protocol, "FAST_CONNECT",
+                true, latency, &message,
+            );
+            let ru_ids = ru.keys().cloned().collect();
+            crate::warm_standby::start_scan(records.clone(), candidate.id, ru_ids);
+            return Ok(AutoSelectionResult {
+                selected: Some(summary),
+                total_candidates,
+                tested_candidates: count,
+                first_pass_available: 1,
+                finalists_verified: 1,
+                verified_latency_ms: Some(latency),
+                message,
+                community_feedback: None,
+            });
+        }
+    }
+
     // Like Android TGU, scan every supported catalogue candidate from the
     // current device/network. The semaphore only limits active connections.
     let (available, community_reports) = match probe_all_catalog_candidates(app.clone(), records, progress.clone()).await {
@@ -1214,6 +1270,11 @@ pub async fn engine_auto_select(
         &message,
     );
 
+    crate::warm_standby::start_scan(
+        cached_records(&app).unwrap_or_default(),
+        record.id.clone(),
+        ru.keys().cloned().collect(),
+    );
     Ok(AutoSelectionResult {
         selected: Some(summary),
         total_candidates,
