@@ -31,6 +31,8 @@ type EngineStatus = {
   last_check_latency_ms: number | null;
   failure_streak: number;
   switch_count: number;
+  standby_count: number;
+  standby_scanning: boolean;
 };
 type ProxySummary = {
   id: string; protocol: string; server: string; port: number; country: string | null;
@@ -158,7 +160,7 @@ const initialStatus: EngineStatus = {
   connections_total: 0, websocket_connections: 0, cloudflare_connections: 0,
   tcp_fallback_connections: 0, failed_connections: 0, bytes_up: 0, bytes_down: 0,
   uptime_seconds: 0, last_check_epoch_ms: null, last_check_latency_ms: null,
-  failure_streak: 0, switch_count: 0
+  failure_streak: 0, switch_count: 0, standby_count: 0, standby_scanning: false
 };
 
 
@@ -689,14 +691,22 @@ function App() {
         if (disposed) return;
 
         setAutoResult(selection);
+        const fastConnected = selection.selected != null && selection.message.startsWith("Fast Connect:");
+        let telegramLinkOpened = false;
+        if (fastConnected) {
+          await invoke<EngineStatus>("engine_start");
+          telegramLinkOpened = await invoke<boolean>("engine_open_in_telegram_if_needed");
+        }
         await Promise.all([loadProfiles(), loadHistory(), refreshStatus()]);
         if (disposed) return;
 
         setNotice({
           kind: selection.selected ? "success" : "info",
-          text: selection.selected
-            ? `Автоподбор при запуске завершён: ${selection.selected.server}:${selection.selected.port} · ${selection.verified_latency_ms ?? "—"} мс. Нажми «Запустить TGU», чтобы запустить локальный прокси и передать его Telegram.`
-            : `Автоподбор при запуске завершён: ${selection.message}`
+          text: fastConnected
+            ? `Fast Connect: ${selection.selected?.server}:${selection.selected?.port} локально проверен, TGU запущен. ${telegramLinkOpened ? "Подтверди прокси в Telegram." : "Ранее добавленный прокси Telegram уже доступен."} Поиск резервных серверов идёт в фоне.`
+            : selection.selected
+              ? `Автоподбор завершён: ${selection.selected.server}:${selection.selected.port} · ${selection.verified_latency_ms ?? "—"} мс. Нажми «Запустить TGU», чтобы запустить локальный прокси.`
+              : `Автоподбор при запуске завершён: ${selection.message}`
         });
       } catch (error) {
         if (!disposed) setNotice({ kind: "error", text: `Автоподбор при запуске не удался: ${String(error)}` });
@@ -775,7 +785,7 @@ function App() {
           <div className="section-title"><h3>Состояние системы</h3><span>ТЕКУЩЕЕ СОСТОЯНИЕ ДВИЖКА</span></div>
           <div className="metric-grid">
             <div className="metric-card"><div className="metric-top"><span>ЛОКАЛЬНЫЙ ДВИЖОК</span><Server size={16}/></div><strong>{status.engine_ready ? "Готов" : "Остановлен"}</strong><small>{status.engine_ready ? status.endpoint : "Локальный порт не запущен"}</small></div>
-            <div className="metric-card"><div className="metric-top"><span>ВНЕШНИЙ ПРОКСИ</span><Wifi size={16}/></div><strong>{status.upstream_healthy ? "Работает" : "Ожидание"}</strong><small>{status.current_route || "Внешний прокси не выбран"}</small></div>
+            <div className="metric-card"><div className="metric-top"><span>ВНЕШНИЙ ПРОКСИ</span><Wifi size={16}/></div><strong>{status.upstream_healthy ? "Работает" : "Ожидание"}</strong><small>{status.current_route || "Внешний прокси не выбран"}</small><small>Резерв: {status.standby_count}/5 · {status.standby_scanning ? "фоновая проверка" : "ожидание / готов"}</small></div>
             <div className="metric-card"><div className="metric-top"><span>СЕРВЕР TELEGRAM</span><ShieldCheck size={16}/></div><strong className="metric-text">{status.telegram_connected ? "Отвечает" : "Не подтверждено"}</strong><small>{status.active_connections} активных локальных подключений</small></div>
           </div>
           <div className="metric-grid traffic-grid">

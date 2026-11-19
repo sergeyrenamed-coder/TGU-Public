@@ -41,6 +41,16 @@ fn cleanup(items: &mut Vec<Warm>) {
     items.retain(|item| item.checked.elapsed() < STANDBY_TTL);
 }
 
+pub(crate) fn standby_count() -> usize {
+    cache().lock().map(|mut items| {
+        cleanup(&mut items);
+        items.len()
+    }).unwrap_or(0)
+}
+pub(crate) fn is_scanning() -> bool {
+    SCANNING.load(Ordering::Acquire)
+}
+
 struct ScanGuard;
 impl Drop for ScanGuard {
     fn drop(&mut self) { SCANNING.store(false, Ordering::Release); }

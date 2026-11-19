@@ -94,6 +94,8 @@ pub struct EngineStatus {
     pub last_check_latency_ms: Option<u64>,
     pub failure_streak: usize,
     pub switch_count: u64,
+    pub standby_count: usize,
+    pub standby_scanning: bool,
 }
 
 #[derive(Default)]
@@ -213,6 +215,8 @@ impl EngineMetrics {
             last_check_latency_ms: if last_check == 0 { None } else { Some(last_latency) },
             failure_streak: self.failure_streak.load(Ordering::Relaxed),
             switch_count: self.switch_count.load(Ordering::Relaxed),
+            standby_count: crate::warm_standby::standby_count(),
+            standby_scanning: crate::warm_standby::is_scanning(),
         }
     }
 }
@@ -942,6 +946,7 @@ async fn monitor_selected_upstream(
     let mut next_switch_attempt_at = 0u64;
     let mut last_catalog_refresh_at = 0u64;
     let mut last_optimization_at = 0u64;
+    let mut last_warm_scan_at = 0u64;
 
     loop {
         let settings = crate::settings::load(&app).unwrap_or_default();
@@ -976,6 +981,20 @@ async fn monitor_selected_upstream(
                 metrics.record_probe(latency, if healthy { 0 } else { consecutive_failures + 1 });
 
                 if healthy {
+                    // Keep three or more fresh reserves while leaving Telegram on
+                    // the current upstream. Never route on stale in-memory proofs.
+                    if now.saturating_sub(last_warm_scan_at) >= 5 * 60_000
+                        && crate::warm_standby::standby_count() < 3
+                        && !crate::warm_standby::is_scanning()
+                    {
+                        last_warm_scan_at = now;
+                        let ru_ids = crate::ru_health::cached(&app).into_keys().collect();
+                        crate::warm_standby::start_scan(
+                            crate::proxy::cached_records(&app).unwrap_or_default(),
+                            active.id.clone(),
+                            ru_ids,
+                        );
+                    }
                     consecutive_failures = 0;
                     metrics.failure_streak.store(0, Ordering::Relaxed);
                     metrics.set_route(&format!("{} · upstream rechecked", active.label()));
