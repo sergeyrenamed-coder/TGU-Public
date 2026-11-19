@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "TGU Desktop",
-  "version": "0.4.1",
+  "version": "0.4.3",
   "identifier": "com.rnmdteam.tgu.desktop",
   "build": {
     "beforeDevCommand": "npm run dev",
@@ -18,7 +18,8 @@
         "minWidth": 900,
         "minHeight": 620,
         "center": true,
-        "resizable": true
+        "resizable": true,
+        "decorations": false
       }
     ],
     "security": {
@@ -27,8 +28,13 @@
   },
   "bundle": {
     "active": true,
-    "targets": ["nsis", "msi"],
-    "icon": ["icons/icon.ico"],
+    "targets": [
+      "nsis",
+      "msi"
+    ],
+    "icon": [
+      "icons/icon.ico"
+    ],
     "shortDescription": "TGU Desktop",
     "longDescription": "Desktop client for TGU proxy routing."
   }
