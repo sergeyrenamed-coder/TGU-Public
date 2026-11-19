@@ -2,6 +2,7 @@ mod engine;
 mod proxy;
 mod ru_health;
 mod rnmd_id;
+mod secure_session;
 mod warm_standby;
 mod profiles;
 mod settings;

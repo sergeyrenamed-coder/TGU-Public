@@ -23,8 +23,13 @@ provider callback remains the existing Supabase `/auth/v1/callback`.
 - Browser uses `custom:telegram` with a locally generated, single-use PKCE S256 verifier.
 - The callback listener binds to loopback only, has a three-minute deadline and
   checks the state if Supabase passes one; PKCE is the definitive binding.
-- Supabase access/refresh tokens and expiry are stored in Windows Credential
-  Manager (separate from proxy profiles), not React/localStorage.
+- Supabase access/refresh tokens and expiry are stored in an AES-256-GCM
+  encrypted per-user app-data file. Only its random 32-byte AES key is kept
+  in Windows Credential Manager, avoiding the 2560-byte credential blob limit.
+- Tokens are never stored in React/localStorage, and existing v1 credentials
+  are migrated automatically when a valid saved session is found.
+- Logout deletes the encrypted account session and its encryption key; the
+  separate proxy-profile vault remains untouched.
 - On refresh, the refresh token is rotated and stored; on sign-out local token
   storage is cleared, even if the server is offline.
 - RLS-protected profile, devices, orders and entitlements are read with the

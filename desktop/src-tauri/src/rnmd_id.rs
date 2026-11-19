@@ -1,7 +1,6 @@
 //! RNMD ID / Telegram OIDC desktop login using Supabase Auth PKCE.
-//! Tokens never reach the WebView. Windows Credential Manager stores the session.
+//! Tokens never reach the WebView. An AES-GCM file stores the session; Windows Credential Manager stores only its short encryption key.
 //! The loopback callback must be allowlisted in Supabase Auth Redirect URLs.
-use keyring::Entry;
 use rand::RngCore;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
@@ -58,33 +57,21 @@ fn now() -> u64 {
     SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_secs()
 }
 
-fn credential() -> Result<Entry, String> {
-    Entry::new(KEYRING_SERVICE, KEYRING_ACCOUNT)
-        .map_err(|_| "Windows Credential Manager недоступен.".to_string())
+fn load_session(app: &AppHandle) -> Result<Option<Session>, String> {
+    crate::secure_session::load(app)?
+        .map(|data| serde_json::from_str::<Session>(&data)
+            .map_err(|_| "Сохранённая сессия RNMD ID повреждена.".to_string()))
+        .transpose()
 }
 
-fn load_session() -> Result<Option<Session>, String> {
-    let secret = match credential()?.get_password() {
-        Ok(secret) => secret,
-        Err(keyring::Error::NoEntry) => return Ok(None),
-        Err(_) => return Err("Не удалось открыть защищённую сессию RNMD ID.".into()),
-    };
-    let session: Session = serde_json::from_str(&secret)
-        .map_err(|_| "Хранимая сессия RNMD ID повреждена.".to_string())?;
-    Ok(Some(session))
+fn save_session(app: &AppHandle, session: &Session) -> Result<(), String> {
+    let data = serde_json::to_string(session)
+        .map_err(|_| "Не удалось подготовить сессию RNMD ID.".to_string())?;
+    crate::secure_session::save(app, &data)
 }
 
-fn save_session(session: &Session) -> Result<(), String> {
-    let body = serde_json::to_string(session).map_err(|_| "Ошибка сохранения сессии.".to_string())?;
-    credential()?.set_password(&body)
-        .map_err(|_| "Не удалось сохранить RNMD ID в Windows Credential Manager.".to_string())
-}
-
-fn delete_session() -> Result<(), String> {
-    match credential()?.delete_credential() {
-        Ok(_) | Err(keyring::Error::NoEntry) => Ok(()),
-        Err(_) => Err("Не удалось удалить токен RNMD ID из Windows Credential Manager.".into()),
-    }
+fn delete_session(app: &AppHandle) -> Result<(), String> {
+    crate::secure_session::delete(app)
 }
 
 fn base64url(bytes: &[u8]) -> String {
@@ -142,20 +129,20 @@ fn from_token_response(value: &Value) -> Result<Session, String> {
     })
 }
 
-async fn active_session() -> Result<Option<Session>, String> {
-    let Some(mut session) = load_session()? else { return Ok(None) };
+async fn active_session(app: &AppHandle) -> Result<Option<Session>, String> {
+    let Some(mut session) = load_session(app)? else { return Ok(None) };
     if session.expires_at > now().saturating_add(90) { return Ok(Some(session)); }
     let response = client()?.post(format!("{SUPABASE_URL}/auth/v1/token?grant_type=refresh_token"))
         .header("apikey", PUBLISHABLE_KEY)
         .json(&json!({"refresh_token": session.refresh_token}))
         .send().await.map_err(|_| "Не удалось обновить сессию RNMD ID. Проверь интернет.".to_string())?;
     if !response.status().is_success() {
-        delete_session()?;
+        delete_session(app)?;
         return Ok(None);
     }
     let body: Value = response.json().await.map_err(|_| "Некорректный ответ RNMD ID.".to_string())?;
     session = from_token_response(&body)?;
-    save_session(&session)?;
+    save_session(app, &session)?;
     Ok(Some(session))
 }
 
@@ -296,20 +283,20 @@ pub async fn rnmd_login(app: AppHandle) -> Result<Account, String> {
     let code = read_callback(listener, state).await?;
     let session = exchange_code(&code, &verifier).await?;
     let account = get_account(&session).await?;
-    save_session(&session)?;
+    save_session(&app, &session)?;
     Ok(account)
 }
 
 #[tauri::command]
-pub async fn rnmd_status() -> Result<Option<Account>, String> {
-    let Some(session) = active_session().await? else { return Ok(None) };
+pub async fn rnmd_status(app: AppHandle) -> Result<Option<Account>, String> {
+    let Some(session) = active_session(&app).await? else { return Ok(None) };
     get_account(&session).await.map(Some)
 }
 
 #[tauri::command]
-pub async fn rnmd_logout() -> Result<(), String> {
-    let session = load_session()?;
-    delete_session()?; // Clear local tokens even if network logout fails.
+pub async fn rnmd_logout(app: AppHandle) -> Result<(), String> {
+    let session = load_session(&app)?;
+    delete_session(&app)?; // Clear local tokens even if network logout fails.
     if let Some(session) = session {
         let _ = client()?.post(format!("{SUPABASE_URL}/auth/v1/logout"))
             .header("apikey", PUBLISHABLE_KEY)
