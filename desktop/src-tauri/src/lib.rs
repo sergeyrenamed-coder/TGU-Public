@@ -1,6 +1,7 @@
 mod engine;
 mod proxy;
 mod ru_health;
+mod warm_standby;
 mod profiles;
 mod settings;
 mod diagnostics;
