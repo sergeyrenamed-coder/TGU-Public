@@ -1,15 +1,19 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { getVersion } from "@tauri-apps/api/app";
 import { listen } from "@tauri-apps/api/event";
-import { getCurrentWindow } from "@tauri-apps/api/window";
 import {
   Activity, Bookmark, CheckCircle2, ChevronRight, CircleHelp,
   ExternalLink, Globe2, Heart, History, LayoutDashboard, LoaderCircle,
-  Minus, Network, Plus, Power, RefreshCw, Save, Search, Server, Settings,
-  ShieldCheck, SlidersHorizontal, Square, Star, Trash2, Wifi, X, XCircle
+  Network, Plus, Power, RefreshCw, Save, Search, Server, Settings,
+  ShieldCheck, SlidersHorizontal, Star, Trash2, Wifi, X, XCircle,
+  PanelLeftClose, PanelLeftOpen, UserRound, LogOut
 } from "lucide-react";
 
-type Section = "overview" | "catalog" | "selector" | "profiles" | "diagnostics" | "favorites" | "history" | "settings" | "about";
+type Section = "overview" | "catalog" | "selector" | "profiles" | "diagnostics" | "favorites" | "history" | "settings" | "account" | "about";
+type RnmdDevice = { id: string; device_name: string; platform: string; last_seen_at: string };
+type RnmdOrder = { id: string; product_code: string; status: string; currency: string; amount_minor: number; created_at: string };
+type RnmdAccount = { user_id: string; display_name: string; telegram_username: string | null; avatar_url: string | null; devices: RnmdDevice[]; orders: RnmdOrder[]; has_tgu_plus: boolean };
 type EngineStatus = {
   engine_ready: boolean;
   upstream_healthy: boolean;
@@ -115,6 +119,18 @@ type DcPortCheck = {
   dc_label: string; address: string; address_family: string; source: string;
   port: number; reachable: boolean; elapsed_ms: number; detail: string;
 };
+type DpiProbeStatus = {
+  platform: string;
+  status: string;
+  elevated: boolean;
+  winws2_found: boolean;
+  windivert_dll_found: boolean;
+  windivert_driver_found: boolean;
+  cygwin_runtime_found: boolean;
+  runtime_started: boolean;
+  resource_directory: string;
+  message: string;
+};
 type DiagnosticsSnapshot = {
   generated_at_ms: number;
   network_checks: NetworkCheck[];
@@ -163,99 +179,14 @@ const initialStatus: EngineStatus = {
   failure_streak: 0, switch_count: 0, standby_count: 0, standby_scanning: false
 };
 
-
-function historyActionLabel(action: string): string {
-  const labels: Record<string, string> = {
-    AUTO_SELECTED: "Автоматически выбран прокси",
-    PROFILE_SELECTED: "Выбран сохранённый профиль",
-    PROFILE_CLEARED: "Сброшен выбранный профиль",
-    PROXY_TEST: "Проверка прокси",
-    AUTO_FAILOVER: "Автоматическое переключение",
-    FAILOVER: "Переключение маршрута",
-    MANUAL_SELECTED: "Прокси выбран вручную",
-  };
-  return labels[action] ?? action.replaceAll("_", " ");
-}
-
-function proxyStageLabel(stage: string): string {
-  const labels: Record<string, string> = {
-    connect: "Подключение",
-    tcp: "TCP-подключение",
-    handshake: "Рукопожатие протокола",
-    protocol: "Проверка протокола",
-    "mtproto + telegram dc": "MTProto и сервер Telegram",
-    "socks5 + telegram dc": "SOCKS5 и сервер Telegram",
-    "protocol support": "Поддержка протокола",
-    mtproto: "MTProto",
-    socks5: "SOCKS5",
-    timeout: "Превышено время ожидания",
-    telegram_dc: "Сервер Telegram",
-  };
-  return labels[stage.toLowerCase()] ?? stage;
-}
-
-function sourceTierLabel(tier: string): string {
-  const labels: Record<string, string> = {
-    verified: "проверенный",
-    stable: "стабильный",
-    external: "внешний",
-  };
-  return labels[tier.toLowerCase()] ?? tier;
-}
-
-function diagnosticSourceLabel(source: string): string {
-  const labels: Record<string, string> = {
-    "Pyrogram reference": "справочник Pyrogram",
-    "Pyrogram / OONI reference": "справочники Pyrogram и OONI",
-    "OONI Telegram test reference": "тестовый справочник OONI для Telegram",
-  };
-  return labels[source] ?? source;
-}
-
-function localizeTechnicalMessage(value: string | null | undefined): string {
-  if (!value) return "";
-  const replacements: Array<[RegExp, string]> = [
-    [/Telegram DC2 accepted the protocol handshake and returned a matching resPQ response\. This verifies the proxy route, not a Telegram account session\./gi, "Сервер Telegram DC2 подтвердил рукопожатие протокола и вернул корректный ответ resPQ. Это подтверждает маршрут через прокси, но не вход в аккаунт Telegram."],
-    [/SOCKS5 TCP connection failed/gi, "Не удалось установить TCP-соединение с SOCKS5-прокси"],
-    [/MTProto upstream connection failed/gi, "Не удалось подключиться к внешнему прокси MTProto"],
-    [/Could not send relay handshake through SOCKS5/gi, "Не удалось передать рукопожатие через SOCKS5"],
-    [/Could not send obfuscated2 handshake to MTProxy/gi, "Не удалось передать рукопожатие obfuscated2 на MTProxy"],
-    [/Direct Telegram DC(\d+) TCP fallback failed/gi, "Резервное TCP-подключение к серверу Telegram DC$1 не удалось"],
-    [/DNS lookup for/gi, "Поиск DNS для"],
-    [/failed health check/gi, "не прошёл проверку доступности"],
-    [/no public DoH address for/gi, "нет общедоступного DoH-адреса для"],
-    [/DoH-resolved WebSocket TCP connect to/gi, "TCP-подключение WebSocket через DoH к"],
-    [/WebSocket target host is not a valid public DNS name\./gi, "Адрес WebSocket не является допустимым общедоступным DNS-именем."],
-    [/Selected MTProto upstream secret is empty\./gi, "Секрет выбранного прокси MTProto пуст."],
-    [/Selected upstream uses an unsupported protocol\./gi, "Выбранный прокси использует неподдерживаемый протокол."],
-    [/Unsupported proxy protocol\.?/gi, "Протокол прокси не поддерживается."],
-    [/Unsupported proxy\.?/gi, "Прокси не поддерживается."],
-    [/Only classic MTProto and SOCKS5 profiles are currently supported\./gi, "Сейчас поддерживаются только классические профили MTProto и SOCKS5."],
-    [/Enter both SOCKS5 username and password, or leave both empty\./gi, "Укажи и имя пользователя, и пароль SOCKS5 либо оставь оба поля пустыми."],
-    [/Enter a public hostname or IP address\. Local\/private addresses are blocked\./gi, "Укажи общедоступное имя узла или IP-адрес. Локальные и частные адреса заблокированы."],
-    [/Port must be between 1 and 65535\./gi, "Порт должен быть в диапазоне от 1 до 65535."],
-    [/Profile name must contain 1–48 characters\./gi, "Название профиля должно содержать от 1 до 48 символов."],
-    [/Classic MTProto requires a 16-byte hexadecimal secret\. FakeTLS\/WEB secrets are not supported\./gi, "Для классического MTProto нужен 16-байтовый шестнадцатеричный секрет. Секреты FakeTLS/WEB не поддерживаются."],
-    [/Connection timed out/gi, "Истекло время ожидания соединения"],
-    [/TCP\/443 timed out/gi, "Истекло время ожидания TCP/443"],
-    [/Connection refused/gi, "Удалённый сервер отклонил соединение"],
-    [/TCP connection established/gi, "TCP-соединение установлено"],
-    [/TCP\/443 connected/gi, "TCP/443 подключён"],
-    [/Network error/gi, "Сетевая ошибка"],
-    [/HTTP client error/gi, "Ошибка HTTP-клиента"],
-    [/TCP connected; TLS\/HTTP failed/gi, "TCP-соединение установлено, но TLS/HTTP завершилось ошибкой"],
-    [/TCP \+ TLS established; HTTP/gi, "TCP и TLS установлены; HTTP"],
-    [/Upstream/gi, "Внешний прокси"],
-    [/upstream/gi, "внешний прокси"],
-    [/Windows Credential Manager/gi, "Диспетчер учётных данных Windows"],
-    [/App data directory/gi, "Папка данных приложения"],
-    [/Local secret error/gi, "Ошибка локального секрета"],
-  ];
-  return replacements.reduce((message, [pattern, localized]) => message.replace(pattern, localized), value);
-}
-
 function App() {
   const [section, setSection] = useState<Section>("overview");
+  const [sidebarExpanded, setSidebarExpanded] = useState(false);
+  const [appVersion, setAppVersion] = useState("0.4.0");
+  const [rnmdAccount, setRnmdAccount] = useState<RnmdAccount | null>(null);
+  const [rnmdBusy, setRnmdBusy] = useState(false);
+  const [rnmdLoading, setRnmdLoading] = useState(true);
+  const [rnmdError, setRnmdError] = useState<string | null>(null);
   const [status, setStatus] = useState<EngineStatus>(initialStatus);
   const [checking, setChecking] = useState(false);
   const [backendAvailable, setBackendAvailable] = useState(false);
@@ -269,6 +200,8 @@ function App() {
   const [historyEntries, setHistoryEntries] = useState<HistoryEntry[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [diagnostics, setDiagnostics] = useState<DiagnosticsSnapshot | null>(null);
+  const [dpiProbe, setDpiProbe] = useState<DpiProbeStatus | null>(null);
+  const [dpiProbeLoading, setDpiProbeLoading] = useState(false);
   const [diagnosticsRunning, setDiagnosticsRunning] = useState(false);
   const [desktopSettings, setDesktopSettings] = useState<DesktopSettings | null>(null);
   const [settingsLoading, setSettingsLoading] = useState(false);
@@ -301,6 +234,50 @@ function App() {
     community_feedback_preference_set: true,
     telegram_proxy_link_fingerprint: null
   };
+
+  async function reloadRnmd() {
+    setRnmdLoading(true);
+    setRnmdError(null);
+    try {
+      setRnmdAccount(await invoke<RnmdAccount | null>("rnmd_status"));
+    } catch (error) {
+      setRnmdError(String(error));
+    } finally {
+      setRnmdLoading(false);
+    }
+  }
+
+  async function loginRnmd() {
+    setRnmdBusy(true);
+    setRnmdError(null);
+    try {
+      setRnmdAccount(await invoke<RnmdAccount>("rnmd_login"));
+      setNotice({ kind: "success", text: "Вход в RNMD ID выполнен." });
+    } catch (error) {
+      setRnmdError(String(error));
+    } finally {
+      setRnmdBusy(false);
+    }
+  }
+
+  async function logoutRnmd() {
+    setRnmdBusy(true);
+    try {
+      await invoke("rnmd_logout");
+      setRnmdAccount(null);
+      setRnmdError(null);
+      setNotice({ kind: "info", text: "Вы вышли из RNMD ID. TGU продолжает работать без аккаунта." });
+    } catch (error) {
+      setRnmdError(String(error));
+    } finally {
+      setRnmdBusy(false);
+    }
+  }
+
+  useEffect(() => {
+    void getVersion().then(setAppVersion).catch(() => {});
+    void reloadRnmd();
+  }, []);
 
   function formatBytes(value: number): string {
     if (value < 1024) return `${value} B`;
@@ -362,6 +339,19 @@ function App() {
     }
   }
 
+  async function runDpiProbe() {
+    setDpiProbeLoading(true);
+    try {
+      const result = await invoke<DpiProbeStatus>("dpi_probe");
+      setDpiProbe(result);
+      setNotice({ kind: result.status === "ready_for_runtime" ? "success" : "info", text: result.message });
+    } catch (error) {
+      setNotice({ kind: "error", text: `Проверка TGU DPI не удалась: ${String(error)}` });
+    } finally {
+      setDpiProbeLoading(false);
+    }
+  }
+
   async function loadCatalog(refresh: boolean): Promise<CatalogResponse | null> {
     setCatalogLoading(true);
     setCatalogError(null);
@@ -393,7 +383,7 @@ function App() {
         text: result.success ? `${proxy.server} прошёл проверку Telegram DC2 за ${result.elapsed_ms} мс.` : `${proxy.server}: ${result.detail}`
       });
     } catch (error) {
-      const result = { success: false, stage: "Проверка прокси", detail: String(error), elapsed_ms: 0 };
+      const result = { success: false, stage: "Proxy check", detail: String(error), elapsed_ms: 0 };
       setTestResults(previous => ({ ...previous, [proxy.id]: result }));
       setNotice({ kind: "error", text: result.detail });
     } finally {
@@ -405,8 +395,8 @@ function App() {
     setConnecting(proxy.id);
     setEngineBusy(true);
     try {
-                                                                            
-                                                                  
+      // Changing an upstream intentionally restarts the local listener. The
+      // local MTProto address remains 127.0.0.1:1443 in Telegram.
       const current = await invoke<EngineStatus>("engine_status");
       if (current.engine_ready) await invoke("engine_stop");
       const verified = await invoke<ProxyTestResult>("engine_select_upstream", { proxyId: proxy.id });
@@ -417,8 +407,8 @@ function App() {
       setNotice({
         kind: "success",
         text: telegramLinkOpened
-          ? "Внешний прокси проверен, локальный прокси TGU запущен. Первая ссылка передана Telegram Desktop — подтверди добавление прокси."
-          : "Внешний прокси проверен, локальный прокси TGU запущен. Ссылка уже передавалась ранее, повторное окно Telegram не открывалось."
+          ? "Upstream проверен, локальный прокси TGU запущен. Первая ссылка передана Telegram Desktop — подтверди добавление прокси."
+          : "Upstream проверен, локальный прокси TGU запущен. Ссылка уже передавалась ранее, повторное окно Telegram не открывалось."
       });
     } catch (error) {
       await refreshStatus();
@@ -440,8 +430,8 @@ function App() {
       const selection = await invoke<AutoSelectionResult>("engine_auto_select");
       setAutoResult(selection);
 
-                                                                             
-                                                                               
+      // A failed new selection must not erase an existing working profile or
+      // silently change its routing policy. The previous upstream is retained.
       await invoke<EngineStatus>("engine_start");
       const telegramLinkOpened = await invoke<boolean>("engine_open_in_telegram_if_needed");
       await Promise.all([refreshStatus(), loadProfiles(), loadHistory()]);
@@ -455,7 +445,7 @@ function App() {
         kind: selection.selected ? "success" : "info",
         text: selection.selected
           ? `Выбран ${selection.selected.protocol} ${selection.selected.server}:${selection.selected.port} · ${selection.verified_latency_ms ?? "—"} мс.${telegramNote}${feedbackNote}`
-          : `${selection.message}${telegramNote}${feedbackNote} Пока внешний прокси не выбран, движок использует доступные резервные маршруты.`
+          : `${selection.message}${telegramNote}${feedbackNote} Пока upstream не выбран, движок использует доступные резервные маршруты.`
       });
     } catch (error) {
       await refreshStatus();
@@ -478,7 +468,7 @@ function App() {
     setEngineBusy(true);
     try {
       setStatus(await invoke<EngineStatus>("engine_stop"));
-      setNotice({ kind: "info", text: "Локальный MTProto-прокси остановлен. Telegram больше не сможет использовать локальный маршрут TGU." });
+      setNotice({ kind: "info", text: "Локальный MTProto endpoint остановлен. Telegram больше не сможет использовать локальный маршрут TGU." });
     } catch (error) {
       setNotice({ kind: "error", text: String(error) });
     } finally {
@@ -605,7 +595,7 @@ function App() {
       if (current.engine_ready) await invoke("engine_stop");
       await invoke("profile_clear");
       await Promise.all([loadProfiles(), refreshStatus()]);
-      setNotice({ kind: "info", text: "Внешний прокси очищен. Следующий запуск использует АВТО · автоматический резервный маршрут." });
+      setNotice({ kind: "info", text: "Внешний upstream очищен. Следующий запуск использует AUTO transport fallback." });
     } catch (error) {
       setNotice({ kind: "error", text: String(error) });
     } finally {
@@ -650,7 +640,7 @@ function App() {
     try {
       const result = await invoke<DiagnosticsSnapshot>("diagnostics_run");
       setDiagnostics(result);
-      setNotice({ kind: "success", text: `Диагностика завершена: TLS/HTTP ${result.network_successes}/${result.network_total}, TCP-соединения с серверами Telegram ${result.dc_successes}/${result.dc_total}.` });
+      setNotice({ kind: "success", text: `Диагностика завершена: TLS/HTTP ${result.network_successes}/${result.network_total}, Telegram DC TCP ${result.dc_successes}/${result.dc_total}.` });
     } catch (error) {
       setNotice({ kind: "error", text: String(error) });
     } finally {
@@ -686,7 +676,7 @@ function App() {
         const current = await invoke<EngineStatus>("engine_status");
         if (disposed || current.engine_ready) return;
 
-        setNotice({ kind: "info", text: "TGU автоматически подбирает рабочий маршрут в сети этого компьютера…" });
+        setNotice({ kind: "info", text: "TGU автоматически подбирает рабочий маршрут по сети этого компьютера…" });
         const selection = await invoke<AutoSelectionResult>("engine_auto_select");
         if (disposed) return;
 
@@ -699,14 +689,13 @@ function App() {
         }
         await Promise.all([loadProfiles(), loadHistory(), refreshStatus()]);
         if (disposed) return;
-
         setNotice({
           kind: selection.selected ? "success" : "info",
           text: fastConnected
-            ? `Fast Connect: ${selection.selected?.server}:${selection.selected?.port} локально проверен, TGU запущен. ${telegramLinkOpened ? "Подтверди прокси в Telegram." : "Ранее добавленный прокси Telegram уже доступен."} Поиск резервных серверов идёт в фоне.`
+            ? `Fast Connect: ${selection.selected?.server}:${selection.selected?.port} проверен на ПК, TGU запущен. ${telegramLinkOpened ? "Подтверди прокси в Telegram." : "Ранее добавленный прокси готов."} Резерв пополняется в фоне.`
             : selection.selected
               ? `Автоподбор завершён: ${selection.selected.server}:${selection.selected.port} · ${selection.verified_latency_ms ?? "—"} мс. Нажми «Запустить TGU», чтобы запустить локальный прокси.`
-              : `Автоподбор при запуске завершён: ${selection.message}`
+              : `Автоподбор завершён: ${selection.message}`
         });
       } catch (error) {
         if (!disposed) setNotice({ kind: "error", text: `Автоподбор при запуске не удался: ${String(error)}` });
@@ -721,8 +710,8 @@ function App() {
     };
   }, []);
 
-  const title = nav.find(item => item.id === section)?.label ?? (section === "settings" ? "Настройки" : "О программе");
-  const desktopWindow = getCurrentWindow();
+  const title = nav.find(item => item.id === section)?.label ??
+    (section === "settings" ? "Настройки" : section === "account" ? "RNMD ID" : "О программе");
   const filteredProxies = useMemo(() => {
     if (!catalog) return [];
     const term = search.trim().toLowerCase();
@@ -746,30 +735,50 @@ function App() {
   const visibleProxies = filteredProxies.slice(0, visibleCount);
 
   return <div className="app-shell">
-    <aside className="sidebar">
-      <div className="brand"><img className="brand-mark" src="/tgu-icon.svg" alt="TGU"/><div className="brand-caption"><b>TGU</b><span>ПК-КЛИЕНТ</span></div></div>
+    <aside className={sidebarExpanded ? "sidebar expanded" : "sidebar collapsed"} aria-label="Навигация TGU">
+      <div className="sidebar-head">
+        <div className="brand"><img className="brand-mark" src="/tgu-icon.svg" alt="TGU"/><div className="brand-caption"><b>TGU</b><span>DESKTOP</span></div></div>
+        <button className="sidebar-toggle" type="button" onClick={() => setSidebarExpanded(v => !v)}
+          aria-label={sidebarExpanded ? "Свернуть боковую панель" : "Развернуть боковую панель"}
+          title={sidebarExpanded ? "Свернуть меню" : "Развернуть меню"} aria-expanded={sidebarExpanded}>
+          {sidebarExpanded ? <PanelLeftClose size={18}/> : <PanelLeftOpen size={18}/>}
+        </button>
+      </div>
       <div className="nav-label">РАБОЧЕЕ ПРОСТРАНСТВО</div>
-      <nav>{nav.map(item => { const Icon = item.icon; return <button key={item.id} className={section === item.id ? "nav-item active" : "nav-item"} onClick={() => setSection(item.id)}><Icon size={17} strokeWidth={1.8}/><span>{item.label}</span></button>; })}</nav>
+      <nav className="sidebar-nav-scroll">{nav.map(item => { const Icon = item.icon; return <button key={item.id} type="button"
+        title={!sidebarExpanded ? item.label : undefined} aria-label={item.label}
+        aria-current={section === item.id ? "page" : undefined}
+        className={section === item.id ? "nav-item active" : "nav-item"}
+        onClick={() => setSection(item.id)}><Icon className="nav-icon" size={19} strokeWidth={1.8}/><span className="nav-text">{item.label}</span></button>; })}</nav>
       <div className="sidebar-bottom">
-        <button className={section === "settings" ? "nav-item active" : "nav-item"} onClick={() => setSection("settings")}><Settings size={17}/><span>Настройки</span></button>
-        <button className={section === "about" ? "nav-item active" : "nav-item"} onClick={() => setSection("about")}><CircleHelp size={17}/><span>О программе</span></button>
-        <div className="sidebar-version"><span className="version-dot"/> TGU Desktop <span>v0.3.0</span></div>
+        <button type="button" title={!sidebarExpanded ? "RNMD ID" : undefined} aria-label="RNMD ID" className={section === "account" ? "nav-item active" : "nav-item"} onClick={() => setSection("account")}>
+          <UserRound className="nav-icon" size={19}/><span className="nav-text">{rnmdAccount?.display_name || "RNMD ID"}</span></button>
+        <button type="button" title={!sidebarExpanded ? "Настройки" : undefined} aria-label="Настройки" className={section === "settings" ? "nav-item active" : "nav-item"} onClick={() => setSection("settings")}>
+          <Settings className="nav-icon" size={19}/><span className="nav-text">Настройки</span></button>
+        <button type="button" title={!sidebarExpanded ? "О программе" : undefined} aria-label="О программе" className={section === "about" ? "nav-item active" : "nav-item"} onClick={() => setSection("about")}>
+          <CircleHelp className="nav-icon" size={19}/><span className="nav-text">О программе</span></button>
+        <div className="sidebar-version" title={`TGU Desktop v${appVersion}`}>
+          <span className="version-dot"/><span className="version-name">TGU Desktop</span><span className="version-number">v{appVersion}</span>
+        </div>
       </div>
     </aside>
     <main className="main">
-      <header className="topbar"><div className="topbar-drag" data-tauri-drag-region><div className="breadcrumbs" data-tauri-drag-region>TGU Desktop <ChevronRight size={13}/><span>{title}</span></div></div><div className="topbar-right"><span className="local-label"><span/> ЛОКАЛЬНЫЙ РЕЖИМ</span><div className="avatar">T</div><div className="window-controls"><button type="button" title="Свернуть" aria-label="Свернуть окно" onClick={() => void desktopWindow.minimize()}><Minus size={15}/></button><button type="button" title="Развернуть или восстановить" aria-label="Развернуть или восстановить окно" onClick={() => void desktopWindow.toggleMaximize()}><Square size={12}/></button><button type="button" className="window-close" title="Скрыть в системный трей" aria-label="Скрыть TGU в системный трей" onClick={() => void desktopWindow.close()}><X size={15}/></button></div></div></header>
+      <header className="topbar"><div className="breadcrumbs">TGU Desktop <ChevronRight size={13}/><span>{title}</span></div><div className="topbar-right"><span className="local-label"><span/> ЛОКАЛЬНЫЙ РЕЖИМ</span>
+        <button type="button" className="topbar-account" onClick={() => setSection("account")} title={rnmdAccount ? "Открыть RNMD ID" : "Войти в RNMD ID"} aria-label="Профиль RNMD ID">
+          {rnmdAccount?.avatar_url ? <img src={rnmdAccount.avatar_url} alt="" referrerPolicy="no-referrer"/> : <UserRound size={16}/>}
+        </button></div></header>
       <div className="page">
         {section === "overview" ? <>
-          <div className="page-heading"><div><div className="eyebrow">ПАНЕЛЬ УПРАВЛЕНИЯ</div><h1>Обзор</h1><p>Локальный MTProto-прокси и внешний маршрут для Telegram.</p></div><button className="icon-button" title="Обновить состояние" onClick={() => void refreshStatus()}><RefreshCw size={17} className={checking ? "spin" : ""}/></button></div>
+          <div className="page-heading"><div><div className="eyebrow">ПАНЕЛЬ УПРАВЛЕНИЯ</div><h1>Обзор</h1><p>Локальный MTProto relay и внешний маршрут Telegram.</p></div><button className="icon-button" title="Обновить состояние" onClick={() => void refreshStatus()}><RefreshCw size={17} className={checking ? "spin" : ""}/></button></div>
           <section className="status-card">
-            <div className="status-main"><div className="status-symbol"><Power size={22}/></div><div><div className="eyebrow">ЛОКАЛЬНЫЙ MTProto</div><h2>{status.engine_ready ? "Движок запущен" : "Движок остановлен"}</h2><p>{status.engine_ready ? `Слушает ${status.endpoint}` : "Запусти локальный прокси для Telegram Desktop."}</p></div></div>
+            <div className="status-main"><div className="status-symbol"><Power size={22}/></div><div><div className="eyebrow">ЛОКАЛЬНЫЙ MTProto</div><h2>{status.engine_ready ? "Engine Ready" : "Engine Stopped"}</h2><p>{status.engine_ready ? `Слушает ${status.endpoint}` : "Запусти локальный endpoint для Telegram Desktop."}</p></div></div>
             {status.engine_ready
               ? <button className="button secondary" disabled={engineBusy} onClick={() => void stopEngine()}><Power size={16}/>{engineBusy ? "Остановка…" : "Остановить"}</button>
               : <button className="button primary" disabled={engineBusy} onClick={() => void startEngine()}><Power size={16}/>{engineBusy ? "Запуск…" : "Запустить TGU"}</button>}
           </section>
           {autoProgress.is_running && <section className="panel auto-progress-panel">
             <div className="panel-heading">
-              <div><h3>Автоподбор выполняется</h3><p>{localizeTechnicalMessage(autoProgress.phase)}</p></div>
+              <div><h3>Автоподбор выполняется</h3><p>{autoProgress.phase}</p></div>
               <strong className="auto-progress-count">{autoProgress.completed.toLocaleString("ru-RU")} / {autoProgress.total.toLocaleString("ru-RU")}</strong>
             </div>
             <div className="auto-progress-track"><span style={{ width: `${autoProgress.total > 0 ? Math.min(100, autoProgress.completed / autoProgress.total * 100) : 0}%` }}/></div>
@@ -782,42 +791,42 @@ function App() {
             {autoProgress.current_endpoint && <div className="auto-progress-line"><span>СЕЙЧАС</span><b>{autoProgress.current_endpoint}</b></div>}
             {autoProgress.best_endpoint && <div className="auto-progress-line"><span>ЛИДЕР</span><b>{autoProgress.best_endpoint} · {autoProgress.best_latency_ms ?? "—"} мс</b></div>}
           </section>}
-          <div className="section-title"><h3>Состояние системы</h3><span>ТЕКУЩЕЕ СОСТОЯНИЕ ДВИЖКА</span></div>
+          <div className="section-title"><h3>Состояние системы</h3><span>ФАКТИЧЕСКИЙ СТАТУС BACKEND</span></div>
           <div className="metric-grid">
-            <div className="metric-card"><div className="metric-top"><span>ЛОКАЛЬНЫЙ ДВИЖОК</span><Server size={16}/></div><strong>{status.engine_ready ? "Готов" : "Остановлен"}</strong><small>{status.engine_ready ? status.endpoint : "Локальный порт не запущен"}</small></div>
-            <div className="metric-card"><div className="metric-top"><span>ВНЕШНИЙ ПРОКСИ</span><Wifi size={16}/></div><strong>{status.upstream_healthy ? "Работает" : "Ожидание"}</strong><small>{status.current_route || "Внешний прокси не выбран"}</small><small>Резерв: {status.standby_count}/5 · {status.standby_scanning ? "фоновая проверка" : "ожидание / готов"}</small></div>
-            <div className="metric-card"><div className="metric-top"><span>СЕРВЕР TELEGRAM</span><ShieldCheck size={16}/></div><strong className="metric-text">{status.telegram_connected ? "Отвечает" : "Не подтверждено"}</strong><small>{status.active_connections} активных локальных подключений</small></div>
+            <div className="metric-card"><div className="metric-top"><span>LOCAL ENGINE</span><Server size={16}/></div><strong>{status.engine_ready ? "Ready" : "Stopped"}</strong><small>{status.engine_ready ? status.endpoint : "Локальный listener остановлен"}</small></div>
+            <div className="metric-card"><div className="metric-top"><span>UPSTREAM</span><Wifi size={16}/></div><strong>{status.upstream_healthy ? "Healthy" : "Waiting"}</strong><small>{status.current_route || "Маршрут ещё не открыт"}</small><small>Резерв: {status.standby_count}/5 · {status.standby_scanning ? "проверка в фоне" : "ожидание / готов"}</small></div>
+            <div className="metric-card"><div className="metric-top"><span>TELEGRAM DC</span><ShieldCheck size={16}/></div><strong className="metric-text">{status.telegram_connected ? "Responding" : "Не подтверждено"}</strong><small>{status.active_connections} активных локальных сессий</small></div>
           </div>
           <div className="metric-grid traffic-grid">
-            <div className="metric-card"><div className="metric-top"><span>ОТПРАВЛЕНО</span><Activity size={16}/></div><strong>{formatBytes(status.bytes_up)}</strong><small>От Telegram к внешнему прокси</small></div>
-            <div className="metric-card"><div className="metric-top"><span>ПОЛУЧЕНО</span><Activity size={16}/></div><strong>{formatBytes(status.bytes_down)}</strong><small>От внешнего прокси к Telegram</small></div>
-            <div className="metric-card"><div className="metric-top"><span>СЕССИИ</span><Network size={16}/></div><strong>{status.connections_total.toLocaleString("ru-RU")}</strong><small>{formatDuration(status.uptime_seconds)} · {status.failed_connections} ошибок</small></div>
+            <div className="metric-card"><div className="metric-top"><span>TRAFFIC UP</span><Activity size={16}/></div><strong>{formatBytes(status.bytes_up)}</strong><small>От Telegram Desktop к upstream</small></div>
+            <div className="metric-card"><div className="metric-top"><span>TRAFFIC DOWN</span><Activity size={16}/></div><strong>{formatBytes(status.bytes_down)}</strong><small>От upstream к Telegram Desktop</small></div>
+            <div className="metric-card"><div className="metric-top"><span>SESSIONS</span><Network size={16}/></div><strong>{status.connections_total.toLocaleString("ru-RU")}</strong><small>{formatDuration(status.uptime_seconds)} · {status.failed_connections} ошибок</small></div>
           </div>
           <div className="content-grid">
-            <section className="panel"><div className="panel-heading"><div><h3>Маршрут подключения</h3><p>Telegram подключается к локальному прокси TGU</p></div><span className={status.engine_ready ? "state-pill on" : "state-pill"}>{status.engine_ready ? "ОЖИДАЕТ ПОДКЛЮЧЕНИЯ" : "ОСТАНОВЛЕН"}</span></div>
-              <div className="connection-row"><div className="connection-icon"><Network size={18}/></div><div className="connection-info"><b>Локальный адрес MTProto</b><span>{status.endpoint} · секрет генерируется локально</span></div><span className="muted">{status.engine_ready ? <CheckCircle2 size={16}/> : "—"}</span></div>
-              <div className="connection-row"><div className="connection-icon"><Globe2 size={18}/></div><div className="connection-info"><b>Выбранный внешний прокси</b><span>{status.selected_upstream || "АВТО · Telegram WebSocket → Cloudflare WebSocket → TCP"}</span></div><span className="muted">УРОВЕНЬ 3</span></div>
-              {status.last_error && <div className="proxy-unsupported">{localizeTechnicalMessage(status.last_error)}</div>}
-              <div className="panel-footer"><span>{backendAvailable ? "Сетевой модуль отвечает." : "Сетевой модуль пока недоступен."} Ответ DC появляется после реального трафика.</span><button className="text-button" onClick={() => setSection("diagnostics")}>Диагностика <ChevronRight size={14}/></button></div>
+            <section className="panel"><div className="panel-heading"><div><h3>Маршрут подключения</h3><p>Telegram подключается к локальному прокси TGU</p></div><span className={status.engine_ready ? "state-pill on" : "state-pill"}>{status.engine_ready ? "LISTENING" : "STOPPED"}</span></div>
+              <div className="connection-row"><div className="connection-icon"><Network size={18}/></div><div className="connection-info"><b>Local MTProto endpoint</b><span>{status.endpoint} · секрет генерируется локально</span></div><span className="muted">{status.engine_ready ? <CheckCircle2 size={16}/> : "—"}</span></div>
+              <div className="connection-row"><div className="connection-icon"><Globe2 size={18}/></div><div className="connection-info"><b>Selected upstream</b><span>{status.selected_upstream || "AUTO · Telegram WS → Cloudflare WS → TCP"}</span></div><span className="muted">L3</span></div>
+              {status.last_error && <div className="proxy-unsupported">{status.last_error}</div>}
+              <div className="panel-footer"><span>{backendAvailable ? "Rust relay backend отвечает." : "Backend пока недоступен."} Ответ DC появляется после реального трафика.</span><button className="text-button" onClick={() => setSection("diagnostics")}>Диагностика <ChevronRight size={14}/></button></div>
             </section>
             <section className="panel quick-panel"><div className="panel-heading"><div><h3>Быстрые действия</h3><p>Инструменты подключения</p></div></div>
               <button className="quick-action" onClick={() => setSection("catalog")}><span><Network size={17}/></span><div><b>Выбрать внешний прокси</b><small>Проверить MTProto / SOCKS5</small></div><ChevronRight size={16}/></button>
-              <button className="quick-action" disabled={!status.engine_ready} onClick={() => void applyProxyToTelegram()}><span><ExternalLink size={17}/></span><div><b>Повторно добавить прокси в Telegram</b><small>Нажми, если удалил локальный прокси из Telegram</small></div><ChevronRight size={16}/></button>
+              <button className="quick-action" disabled={!status.engine_ready} onClick={() => void applyProxyToTelegram()}><span><ExternalLink size={17}/></span><div><b>Повторно открыть Proxy в Telegram</b><small>Используй, если удалил локальный прокси из Telegram</small></div><ChevronRight size={16}/></button>
               <button className="quick-action" onClick={() => void loadCatalog(true)}><span><RefreshCw size={17}/></span><div><b>Обновить каталог</b><small>Загрузить свежие узлы</small></div><ChevronRight size={16}/></button>
-              <button className="quick-action" onClick={() => setSection("selector")}><span><SlidersHorizontal size={17}/></span><div><b>Автоподбор</b><small>Найти лучший прокси автоматически</small></div><ChevronRight size={16}/></button>
+              <button className="quick-action" onClick={() => setSection("selector")}><span><SlidersHorizontal size={17}/></span><div><b>Автоподбор</b><small>Пока доступен ручной выбор</small></div><ChevronRight size={16}/></button>
             </section>
           </div>
         </> : section === "catalog" ? <>
-          <div className="page-heading"><div><div className="eyebrow">КАТАЛОГ ПРОКСИ TGU</div><h1>Прокси-каталог</h1><p>Узел проверяется локально, затем используется как внешний маршрут TGU.</p></div><button className="button secondary" disabled={catalogLoading} onClick={() => void loadCatalog(true)}><RefreshCw size={15} className={catalogLoading ? "spin" : ""}/>{catalogLoading ? "Обновление…" : "Обновить каталог"}</button></div>
+          <div className="page-heading"><div><div className="eyebrow">TGU PROXY DIRECTORY</div><h1>Прокси-каталог</h1><p>Узел проверяется локально, затем используется как внешний маршрут TGU.</p></div><button className="button secondary" disabled={catalogLoading} onClick={() => void loadCatalog(true)}><RefreshCw size={15} className={catalogLoading ? "spin" : ""}/>{catalogLoading ? "Обновление…" : "Обновить каталог"}</button></div>
           <div className="catalog-summary">
             <div><span>АКТУАЛЬНЫХ ЗАПИСЕЙ</span><strong>{catalog ? catalog.count.toLocaleString("ru-RU") : "—"}</strong></div>
             <div><span>ИСТОЧНИК</span><strong>{catalog?.source.includes("freedomchecker") ? "Freedom Checker" : "GitHub Raw"}</strong></div>
             <div><span>СНИМОК</span><strong>{catalog?.generated_at ? new Date(catalog.generated_at).toLocaleString("ru-RU") : "—"}</strong></div>
             <div><span>КЭШ</span><strong>{catalog ? (catalog.from_cache ? "Локальный" : "Обновлён") : "—"}</strong></div>
           </div>
-          {catalog?.warning && <div className="catalog-notice"><Activity size={15}/><span>{localizeTechnicalMessage(catalog.warning)}</span></div>}
-          {notice && <div className={notice.kind === "success" ? "catalog-notice success" : notice.kind === "error" ? "catalog-notice error" : "catalog-notice"}>{notice.kind === "success" ? <CheckCircle2 size={15}/> : notice.kind === "error" ? <XCircle size={15}/> : <Activity size={15}/>}<span>{localizeTechnicalMessage(notice.text)}</span><button aria-label="Закрыть" onClick={() => setNotice(null)}><XCircle size={14}/></button></div>}
-          {catalogError && <div className="catalog-notice error"><XCircle size={15}/><span>{localizeTechnicalMessage(catalogError)}</span></div>}
+          {catalog?.warning && <div className="catalog-notice"><Activity size={15}/><span>{catalog.warning}</span></div>}
+          {notice && <div className={notice.kind === "success" ? "catalog-notice success" : notice.kind === "error" ? "catalog-notice error" : "catalog-notice"}>{notice.kind === "success" ? <CheckCircle2 size={15}/> : notice.kind === "error" ? <XCircle size={15}/> : <Activity size={15}/>}<span>{notice.text}</span><button aria-label="Закрыть" onClick={() => setNotice(null)}><XCircle size={14}/></button></div>}
+          {catalogError && <div className="catalog-notice error"><XCircle size={15}/><span>{catalogError}</span></div>}
           <div className="catalog-toolbar">
             <div className="catalog-search"><Search size={16}/><input value={search} onChange={event => { setSearch(event.target.value); setVisibleCount(60); }} placeholder="Поиск по адресу, стране или протоколу…"/></div>
             <div className="filter-row">
@@ -832,18 +841,18 @@ function App() {
             <button className={statusFilter === "failed" ? "filter-chip active" : "filter-chip"} onClick={() => { setStatusFilter(statusFilter === "failed" ? "all" : "failed"); setVisibleCount(60); }}>Недоступные</button>
             <button className={statusFilter === "unsupported" ? "filter-chip active" : "filter-chip"} onClick={() => { setStatusFilter(statusFilter === "unsupported" ? "all" : "unsupported"); setVisibleCount(60); }}>Не поддерживаются</button>
           </div>
-          <div className="catalog-list-heading"><span>{filteredProxies.length.toLocaleString("ru-RU")} ПРОКСИ</span><span>RU VERIFIED · YANDEX CLOUD · НУЖНА ЛОКАЛЬНАЯ ПРОВЕРКА</span></div>
-          {catalogLoading && !catalog ? <div className="empty-state"><LoaderCircle className="spin" size={22}/><b>Загружаю каталог</b><span>Получаю последнюю опубликованную версию каталога прокси TGU.</span></div> :
+          <div className="catalog-list-heading"><span>{filteredProxies.length.toLocaleString("ru-RU")} УЗЛОВ</span><span>RU VERIFIED — ПРИОРИТЕТ ИЗ YANDEX CLOUD · НЕ ЗАМЕНЯЕТ ЛОКАЛЬНУЮ ПРОВЕРКУ</span></div>
+          {catalogLoading && !catalog ? <div className="empty-state"><LoaderCircle className="spin" size={22}/><b>Загружаю каталог</b><span>Получаю последнюю опубликованную версию TGU Proxy Directory.</span></div> :
             visibleProxies.length === 0 ? <div className="empty-state"><Search size={22}/><b>Ничего не найдено</b><span>Измени поисковый запрос или обнови каталог.</span></div> :
             <div className="proxy-list">{visibleProxies.map(proxy => {
               const result = testResults[proxy.id]; const isTesting = !!testing[proxy.id]; const isConnecting = connecting === proxy.id;
               return <article className="proxy-card" key={proxy.id}>
-                <div className="proxy-card-main"><div className="proxy-identity"><span className="proxy-type">{proxy.protocol.toUpperCase()}</span><b>{proxy.server}:{proxy.port}</b><small>{proxy.country || "Страна неизвестна"}{proxy.ru_verified ? ` · RU Verified: ${proxy.ru_rtt_ms ?? "—"} мс (Yandex Cloud)` : ""}{proxy.source_tier ? ` · ${sourceTierLabel(proxy.source_tier)}` : ""}{proxy.community_unique_reporters >= 3 ? ` · Сообщество: ${proxy.community_success_rate ?? "—"}% / ${proxy.community_unique_reporters} устройств` : ""}</small></div>
-                  <div className="proxy-meta"><div><span>ЗАДЕРЖКА ИСТОЧНИКА</span><b>{proxy.source_rtt_ms != null ? `${proxy.source_rtt_ms} мс` : "—"}</b></div><div><span>ВРЕМЯ РАБОТЫ</span><b>{proxy.uptime != null ? `${Math.round(proxy.uptime * 100)}%` : "—"}</b></div><div><span>ПРОВЕРОК</span><b>{proxy.checks ?? "—"}</b></div></div></div>
+                <div className="proxy-card-main"><div className="proxy-identity"><span className="proxy-type">{proxy.protocol.toUpperCase()}</span><b>{proxy.server}:{proxy.port}</b><small>{proxy.country || "Страна неизвестна"}{proxy.ru_verified ? ` · RU Verified: ${proxy.ru_rtt_ms ?? "—"} мс (Yandex Cloud)` : ""}{proxy.source_tier ? ` · ${proxy.source_tier}` : ""}{proxy.community_unique_reporters >= 3 ? ` · Сообщество: ${proxy.community_success_rate ?? "—"}% / ${proxy.community_unique_reporters} устройств` : ""}</small></div>
+                  <div className="proxy-meta"><div><span>ИСТОЧНИК RTT</span><b>{proxy.source_rtt_ms != null ? `${proxy.source_rtt_ms} мс` : "—"}</b></div><div><span>UPTIME</span><b>{proxy.uptime != null ? `${Math.round(proxy.uptime * 100)}%` : "—"}</b></div><div><span>ПРОВЕРОК</span><b>{proxy.checks ?? "—"}</b></div></div></div>
                 <div className="proxy-card-bottom">
                   <div className={result ? (result.success ? "proxy-test-state success" : "proxy-test-state error") : "proxy-test-state"}>
                     {isTesting ? <><LoaderCircle size={14} className="spin"/> Проверка Telegram DC2…</> :
-                      result ? (result.success ? <><CheckCircle2 size={14}/> Сервер Telegram DC2 · {result.elapsed_ms} мс</> : <><XCircle size={14}/> {proxyStageLabel(result.stage)}: {localizeTechnicalMessage(result.detail)}</>) :
+                      result ? (result.success ? <><CheckCircle2 size={14}/> Telegram DC2 · {result.elapsed_ms} мс</> : <><XCircle size={14}/> {result.stage}: {result.detail}</>) :
                       proxy.source_verified ? <><Globe2 size={14}/> Проверено каталогом · нужна локальная проверка</> : <><Activity size={14}/> Не проверено из этой сети</>}
                   </div>
                   <div className="proxy-actions">
@@ -852,14 +861,14 @@ function App() {
                     <button className="proxy-action primary" disabled={!proxy.supported || !result?.success || isTesting || isConnecting || engineBusy} onClick={() => void connectThroughTgu(proxy)}>{isConnecting ? <LoaderCircle size={14} className="spin"/> : <ExternalLink size={14}/>}Подключить через TGU</button>
                   </div>
                 </div>
-                {!proxy.supported && <div className="proxy-unsupported">{localizeTechnicalMessage(proxy.unsupported_reason) || "Этот тип прокси пока не поддерживается."}</div>}
+                {!proxy.supported && <div className="proxy-unsupported">{proxy.unsupported_reason || "Этот тип прокси пока не поддерживается."}</div>}
               </article>;
             })}</div>}
           {visibleCount < filteredProxies.length && <button className="load-more" onClick={() => setVisibleCount(value => value + 60)}>Показать ещё 60 узлов</button>}
-          <div className="catalog-footnote">После выбора TGU повторно проверяет внешний прокси, запускает локальный MTProto на 127.0.0.1:1443 и передаёт этот локальный адрес Telegram Desktop. Прокси не добавляется напрямую.</div>
+          <div className="catalog-footnote">После выбора TGU повторно проверяет upstream, запускает локальный MTProto на 127.0.0.1:1443 и передаёт этот локальный адрес Telegram Desktop. Прокси не добавляется напрямую.</div>
         </> : section === "selector" ? <>
           <div className="page-heading">
-            <div><div className="eyebrow">ПРОВЕРКА СЕТИ</div><h1>Автоподбор</h1><p>Проверка внешних прокси по реальному ответу Telegram DC2 с этого компьютера.</p></div>
+            <div><div className="eyebrow">LOCAL NETWORK PROBING</div><h1>Автоподбор</h1><p>Проверка внешних прокси по реальному ответу Telegram DC2 с этого компьютера.</p></div>
             <button className="button primary" disabled={engineBusy || catalogLoading || !catalog} onClick={() => void startAutoRoute()}>
               {engineBusy ? <LoaderCircle size={15} className="spin"/> : <SlidersHorizontal size={15}/>}
               {engineBusy ? "Подбор маршрута…" : "Найти лучший маршрут"}
@@ -868,8 +877,8 @@ function App() {
           <div className="catalog-summary">
             <div><span>ПРОВЕРЕНО / ВСЕГО</span><strong>{autoProgress.total > 0 ? `${autoProgress.completed.toLocaleString("ru-RU")} / ${autoProgress.total.toLocaleString("ru-RU")}` : autoResult ? `${autoResult.tested_candidates} / ${autoResult.total_candidates}` : "—"}</strong></div>
             <div><span>ДОСТУПНО ПОСЛЕ СКАНА</span><strong>{autoProgress.is_running || autoProgress.total > 0 ? autoProgress.available : autoResult?.first_pass_available ?? "—"}</strong></div>
-            <div><span>ПОВТОРНО ПРОВЕРЕНО</span><strong>{autoProgress.finalists_verified || autoResult?.finalists_verified || "—"}</strong></div>
-            <div><span>МИНИМАЛЬНАЯ ЗАДЕРЖКА</span><strong>{autoProgress.best_latency_ms != null ? `${autoProgress.best_latency_ms} мс` : autoResult?.verified_latency_ms != null ? `${autoResult.verified_latency_ms} мс` : "—"}</strong></div>
+            <div><span>ЛИДЕРЫ ПОДТВЕРЖДЕНЫ</span><strong>{autoProgress.finalists_verified || autoResult?.finalists_verified || "—"}</strong></div>
+            <div><span>ЛУЧШИЙ RTT</span><strong>{autoProgress.best_latency_ms != null ? `${autoProgress.best_latency_ms} мс` : autoResult?.verified_latency_ms != null ? `${autoResult.verified_latency_ms} мс` : "—"}</strong></div>
           </div>
           {(autoProgress.is_running || autoProgress.total > 0) && <section className="panel auto-progress-panel">
             <div className="panel-heading">
@@ -885,38 +894,38 @@ function App() {
             </div>
             {autoProgress.current_endpoint && <div className="auto-progress-line"><span>СЕЙЧАС ПРОВЕРЯЕТСЯ</span><b>{autoProgress.current_endpoint}</b></div>}
             {autoProgress.best_endpoint && <div className="auto-progress-line"><span>ТЕКУЩИЙ ЛИДЕР</span><b>{autoProgress.best_endpoint} · {autoProgress.best_latency_ms ?? "—"} мс</b></div>}
-            {autoProgress.message && <div className="panel-footer"><span>{localizeTechnicalMessage(autoProgress.message)}</span></div>}
+            {autoProgress.message && <div className="panel-footer"><span>{autoProgress.message}</span></div>}
           </section>}
-          {autoResult?.message && !autoProgress.is_running && <div className="catalog-notice"><Activity size={15}/><span>{localizeTechnicalMessage(autoResult.message)}</span></div>}
+          {autoResult?.message && !autoProgress.is_running && <div className="catalog-notice"><Activity size={15}/><span>{autoResult.message}</span></div>}
           {autoResult?.selected && <section className="panel">
-            <div className="panel-heading"><div><h3>Выбранный маршрут</h3><p>Кандидат прошёл первый проход и повторные проверки</p></div><span className="state-pill on">ПРОВЕРЕНО</span></div>
-            <div className="connection-row"><div className="connection-icon"><Network size={18}/></div><div className="connection-info"><b>{autoResult.selected.protocol} · {autoResult.selected.server}:{autoResult.selected.port}</b><span>{autoResult.verified_latency_ms ?? "—"} мс · проверено из текущей сети · следующий сеанс Telegram пойдёт через этот прокси</span></div><span className="muted"><CheckCircle2 size={16}/></span></div>
+            <div className="panel-heading"><div><h3>Выбранный маршрут</h3><p>Кандидат прошёл первый проход и повторные проверки</p></div><span className="state-pill on">VERIFIED</span></div>
+            <div className="connection-row"><div className="connection-icon"><Network size={18}/></div><div className="connection-info"><b>{autoResult.selected.protocol} · {autoResult.selected.server}:{autoResult.selected.port}</b><span>{autoResult.verified_latency_ms ?? "—"} мс · проверено из текущей сети · следующий сеанс Telegram пойдёт через этот upstream</span></div><span className="muted"><CheckCircle2 size={16}/></span></div>
           </section>}
           <div className="content-grid">
             <section className="panel"><div className="panel-heading"><div><h3>Как работает подбор</h3><p>Отбрасываем узлы, которые не достигают Telegram DC</p></div></div>
               <div className="connection-row"><div className="connection-icon">1</div><div className="connection-info"><b>Первый проход</b><span>Проверяется каждый поддерживаемый узел из каталога; одновременно выполняется не более 24 проверок.</span></div></div>
-              <div className="connection-row"><div className="connection-icon">2</div><div className="connection-info"><b>Повторная проверка</b><span>Пять самых быстрых доступных прокси проходят ещё две проверки каждый; нестабильные узлы исключаются.</span></div></div>
-              <div className="connection-row"><div className="connection-icon">3</div><div className="connection-info"><b>Маршрут Telegram</b><span>Прокси выбирается для локального MTProto-маршрута на 127.0.0.1:1443.</span></div></div>
-              <div className="panel-footer"><span>Автоподбор не гарантирует подключение, если сеть блокирует все доступные прокси.</span></div>
+              <div className="connection-row"><div className="connection-icon">2</div><div className="connection-info"><b>Повторная проверка</b><span>Пять самых быстрых доступных кандидатов проходят ещё две проверки каждый; нестабильные узлы исключаются.</span></div></div>
+              <div className="connection-row"><div className="connection-icon">3</div><div className="connection-info"><b>Маршрут Telegram</b><span>Профиль выбирается для локального MTProto relay на 127.0.0.1:1443.</span></div></div>
+              <div className="panel-footer"><span>Автоподбор не гарантирует обход, если сеть блокирует все доступные маршруты.</span></div>
             </section>
             <section className="panel quick-panel"><div className="panel-heading"><div><h3>Вручную</h3><p>Выбери прокси из каталога</p></div></div>
-              <button className="quick-action" onClick={() => setSection("catalog")}><span><Network size={17}/></span><div><b>Открыть прокси-каталог</b><small>Проверить MTProto или SOCKS5</small></div><ChevronRight size={16}/></button>
+              <button className="quick-action" onClick={() => setSection("catalog")}><span><Network size={17}/></span><div><b>Открыть прокси-каталог</b><small>Проверить отдельные MTProto / SOCKS5</small></div><ChevronRight size={16}/></button>
             </section>
           </div>
         </> : section === "profiles" ? <>
           <div className="page-heading">
-            <div><div className="eyebrow">ЗАЩИЩЁННОЕ ХРАНИЛИЩЕ</div><h1>Мои прокси</h1><p>Сохранённые прокси. Секреты и пароли зашифрованы на этом компьютере.</p></div>
+            <div><div className="eyebrow">ENCRYPTED LOCAL VAULT</div><h1>Мои прокси</h1><p>Сохранённые внешние upstream-профили. Секреты и пароли зашифрованы локально.</p></div>
             <button className="button primary" onClick={openNewProfile}><Plus size={15}/>Добавить профиль</button>
           </div>
           <div className="catalog-summary">
             <div><span>СОХРАНЕНО</span><strong>{profiles.profiles.length} / 50</strong></div>
-            <div><span>ВЫБРАННЫЙ ВНЕШНИЙ ПРОКСИ</span><strong>{profiles.profiles.find(p => p.id === profiles.selected_id)?.name ?? "АВТО"}</strong></div>
+            <div><span>ВЫБРАННЫЙ UPSTREAM</span><strong>{profiles.profiles.find(p => p.id === profiles.selected_id)?.name ?? "AUTO"}</strong></div>
             <div><span>ИЗБРАННОЕ</span><strong>{profiles.favorite_ids.length}</strong></div>
-            <div><span>ХРАНИЛИЩЕ</span><strong>Защищённое хранилище Windows</strong></div>
+            <div><span>ХРАНИЛИЩЕ</span><strong>Windows Credential Manager</strong></div>
           </div>
           <div className="panel">
             <div className="panel-heading"><div><h3>Сохранённые профили</h3><p>Профиль проверяется из текущей сети перед выбором</p></div>
-              {profiles.selected_id && <button className="proxy-action" disabled={engineBusy} onClick={() => void clearSelectedProfile()}>Сбросить внешний прокси</button>}
+              {profiles.selected_id && <button className="proxy-action" disabled={engineBusy} onClick={() => void clearSelectedProfile()}>Сбросить upstream</button>}
             </div>
             {profilesLoading ? <div className="empty-state"><LoaderCircle size={20} className="spin"/><b>Открываю хранилище</b></div> :
               profiles.profiles.length === 0 ? <div className="empty-state"><div className="empty-icon"><Bookmark size={20}/></div><b>Пока нет сохранённых профилей</b><span>Добавь MTProto или SOCKS5 вручную либо выбери проверенный узел из каталога.</span><button className="button secondary" onClick={openNewProfile}><Plus size={14}/>Добавить профиль</button></div> :
@@ -930,7 +939,7 @@ function App() {
                       <b>{profile.name}</b>
                       <small>{profile.host}:{profile.port}</small>
                     </div>
-                    <span className={selected ? "state-pill on" : "state-pill"}>{selected ? "ВЫБРАН" : "СОХРАНЁН"}</span>
+                    <span className={selected ? "state-pill on" : "state-pill"}>{selected ? "SELECTED" : "SAVED"}</span>
                   </div>
                   <div className="profile-card-actions">
                     <button className="proxy-action" disabled={busy} onClick={() => void testSavedProfile(profile)}>{busy ? <LoaderCircle size={13} className="spin"/> : <Activity size={13}/>}Проверить</button>
@@ -951,24 +960,24 @@ function App() {
                   <label className="form-field"><span>ПРОТОКОЛ</span><select value={profileForm.protocol} onChange={event => setProfileForm(p => p ? { ...p, protocol: event.target.value as "MTProto" | "SOCKS5" } : p)}><option value="MTProto">MTProto</option><option value="SOCKS5">SOCKS5</option></select></label>
                   <label className="form-field"><span>ПОРТ</span><input required inputMode="numeric" value={profileForm.port} onChange={event => setProfileForm(p => p ? { ...p, port: event.target.value } : p)} placeholder="443"/></label>
                 </div>
-                <label className="form-field"><span>СЕРВЕР / IP</span><input required value={profileForm.host} onChange={event => setProfileForm(p => p ? { ...p, host: event.target.value } : p)} placeholder="proxy.example.ru"/></label>
+                <label className="form-field"><span>СЕРВЕР / IP</span><input required value={profileForm.host} onChange={event => setProfileForm(p => p ? { ...p, host: event.target.value } : p)} placeholder="proxy.example.com"/></label>
                 {profileForm.protocol === "MTProto" ?
-                  <label className="form-field"><span>СЕКРЕТ MTProto</span><input required type="password" autoComplete="off" value={profileForm.secret} onChange={event => setProfileForm(p => p ? { ...p, secret: event.target.value } : p)} placeholder="32 шестнадцатеричных символа или dd + секрет"/></label> :
+                  <label className="form-field"><span>MTProto SECRET</span><input required type="password" autoComplete="off" value={profileForm.secret} onChange={event => setProfileForm(p => p ? { ...p, secret: event.target.value } : p)} placeholder="32 hex characters или dd + secret"/></label> :
                   <>
-                    <label className="form-field"><span>ИМЯ ПОЛЬЗОВАТЕЛЯ (НЕОБЯЗАТЕЛЬНО)</span><input autoComplete="off" value={profileForm.username} onChange={event => setProfileForm(p => p ? { ...p, username: event.target.value } : p)} placeholder="имя пользователя"/></label>
-                    <label className="form-field"><span>ПАРОЛЬ (НЕОБЯЗАТЕЛЬНО)</span><input type="password" autoComplete="new-password" value={profileForm.password} onChange={event => setProfileForm(p => p ? { ...p, password: event.target.value } : p)} placeholder="пароль"/></label>
+                    <label className="form-field"><span>USERNAME (НЕОБЯЗАТЕЛЬНО)</span><input autoComplete="off" value={profileForm.username} onChange={event => setProfileForm(p => p ? { ...p, username: event.target.value } : p)} placeholder="username"/></label>
+                    <label className="form-field"><span>PASSWORD (НЕОБЯЗАТЕЛЬНО)</span><input type="password" autoComplete="new-password" value={profileForm.password} onChange={event => setProfileForm(p => p ? { ...p, password: event.target.value } : p)} placeholder="password"/></label>
                   </>}
                 <div className="modal-actions"><button type="button" className="button secondary" onClick={() => setProfileForm(null)}>Отмена</button><button type="submit" className="button primary" disabled={profileBusy === profileForm.id || !profileForm.name.trim() || !profileForm.host.trim()}><Save size={14}/>Сохранить</button></div>
               </form>
             </section>
           </div>}
         </> : section === "favorites" ? <>
-          <div className="page-heading"><div><div className="eyebrow">СОХРАНЁННЫЕ УЗЛЫ</div><h1>Избранное</h1><p>Прокси из каталога, которые ты отметил звёздочкой.</p></div><button className="button secondary" onClick={() => void loadCatalog(true)} disabled={catalogLoading}><RefreshCw size={14} className={catalogLoading ? "spin" : ""}/>Обновить</button></div>
+          <div className="page-heading"><div><div className="eyebrow">SAVED DESTINATIONS</div><h1>Избранное</h1><p>Прокси из каталога, которые ты отметил звёздочкой.</p></div><button className="button secondary" onClick={() => void loadCatalog(true)} disabled={catalogLoading}><RefreshCw size={14} className={catalogLoading ? "spin" : ""}/>Обновить</button></div>
           <div className="catalog-summary">
             <div><span>В ИЗБРАННОМ</span><strong>{profiles.favorite_ids.length}</strong></div>
             <div><span>ДОСТУПНО В КАТАЛОГЕ</span><strong>{catalog?.proxies.filter(p => profiles.favorite_ids.includes(p.id)).length ?? 0}</strong></div>
-            <div><span>ВЫБРАННЫЙ ВНЕШНИЙ ПРОКСИ</span><strong>{profiles.profiles.find(p => p.id === profiles.selected_id)?.name ?? "АВТО"}</strong></div>
-            <div><span>ПРОВЕРКА</span><strong>Из этой сети</strong></div>
+            <div><span>ВЫБРАННЫЙ UPSTREAM</span><strong>{profiles.profiles.find(p => p.id === profiles.selected_id)?.name ?? "AUTO"}</strong></div>
+            <div><span>ПРОВЕРКА</span><strong>Из текущей сети</strong></div>
           </div>
           {!catalog ? <div className="empty-state"><LoaderCircle size={20} className="spin"/><b>Загружаю каталог</b><span>Избранные адреса сопоставляются с актуальным источником.</span></div> :
             catalog.proxies.filter(proxy => profiles.favorite_ids.includes(proxy.id)).length === 0 ?
@@ -978,14 +987,14 @@ function App() {
                 const isTesting = !!testing[proxy.id];
                 const isConnecting = connecting === proxy.id;
                 return <article className="proxy-card" key={proxy.id}>
-                  <div className="proxy-card-main"><div className="proxy-identity"><span className="proxy-type">{proxy.protocol.toUpperCase()}</span><b>{proxy.server}:{proxy.port}</b><small>{proxy.country ?? "Страна неизвестна"}</small></div><div className="proxy-meta"><div><span>ЗАДЕРЖКА ИСТОЧНИКА</span><b>{proxy.source_rtt_ms ?? "—"}{proxy.source_rtt_ms != null ? " мс" : ""}</b></div><div><span>ВРЕМЯ РАБОТЫ</span><b>{proxy.uptime != null ? `${Math.round(proxy.uptime * 100)}%` : "—"}</b></div></div></div>
-                  <div className="proxy-card-bottom"><div className={result ? (result.success ? "proxy-test-state success" : "proxy-test-state error") : "proxy-test-state"}>{result ? result.success ? `Сервер Telegram DC2 · ${result.elapsed_ms} мс` : result.detail : "Нужна проверка из текущей сети"}</div>
+                  <div className="proxy-card-main"><div className="proxy-identity"><span className="proxy-type">{proxy.protocol.toUpperCase()}</span><b>{proxy.server}:{proxy.port}</b><small>{proxy.country ?? "Страна неизвестна"}</small></div><div className="proxy-meta"><div><span>RTT ИСТОЧНИКА</span><b>{proxy.source_rtt_ms ?? "—"}{proxy.source_rtt_ms != null ? " мс" : ""}</b></div><div><span>UPTIME</span><b>{proxy.uptime != null ? `${Math.round(proxy.uptime * 100)}%` : "—"}</b></div></div></div>
+                  <div className="proxy-card-bottom"><div className={result ? (result.success ? "proxy-test-state success" : "proxy-test-state error") : "proxy-test-state"}>{result ? result.success ? `Telegram DC2 · ${result.elapsed_ms} мс` : result.detail : "Нужна проверка из текущей сети"}</div>
                     <div className="proxy-actions"><button className="proxy-action" onClick={() => void toggleFavorite(proxy)}><Star size={13} fill="currentColor"/>Убрать</button><button className="proxy-action" disabled={!proxy.supported || isTesting} onClick={() => void testProxy(proxy)}>{isTesting ? <LoaderCircle size={13} className="spin"/> : <Activity size={13}/>}Проверить</button><button className="proxy-action primary" disabled={!proxy.supported || !result?.success || isConnecting || engineBusy} onClick={() => void connectThroughTgu(proxy)}>{isConnecting ? <LoaderCircle size={13} className="spin"/> : <ExternalLink size={13}/>}Подключить</button></div>
                   </div>
                 </article>;
               })}</div>}
         </> : section === "history" ? <>
-          <div className="page-heading"><div><div className="eyebrow">ЖУРНАЛ СОБЫТИЙ</div><h1>История</h1><p>Проверки прокси, выбор профиля, автоподбор и переключения маршрута.</p></div><button className="button secondary" onClick={() => void loadHistory()} disabled={historyLoading}><RefreshCw size={14} className={historyLoading ? "spin" : ""}/>Обновить</button></div>
+          <div className="page-heading"><div><div className="eyebrow">LOCAL ACTIVITY LOG</div><h1>История</h1><p>Проверки узлов, выбор профиля, автоподбор и переключения upstream.</p></div><button className="button secondary" onClick={() => void loadHistory()} disabled={historyLoading}><RefreshCw size={14} className={historyLoading ? "spin" : ""}/>Обновить</button></div>
           <div className="catalog-summary">
             <div><span>ЗАПИСЕЙ</span><strong>{historyEntries.length}</strong></div>
             <div><span>УСПЕШНЫХ</span><strong>{historyEntries.filter(entry => entry.success).length}</strong></div>
@@ -998,68 +1007,118 @@ function App() {
               historyEntries.length === 0 ? <div className="empty-state"><div className="empty-icon"><History size={20}/></div><b>Событий пока нет</b><span>Результаты локальных проверок и автоматических переключений появятся здесь.</span></div> :
               <div className="history-list">{historyEntries.map(entry => <article className="history-entry" key={entry.id}>
                 <div className="history-entry-icon">{entry.success ? <CheckCircle2 size={16}/> : <XCircle size={16}/>}</div>
-                <div className="history-entry-main"><b>{historyActionLabel(entry.action)} · {entry.protocol}</b><span>{entry.endpoint}</span><small>{new Date(entry.timestamp_ms).toLocaleString("ru-RU")} · {entry.elapsed_ms} мс</small>{entry.detail && <p>{localizeTechnicalMessage(entry.detail)}</p>}</div>
-                <span className={entry.success ? "state-pill on" : "state-pill"}>{entry.success ? "УСПЕШНО" : "ОШИБКА"}</span>
+                <div className="history-entry-main"><b>{entry.action.replaceAll("_", " ") } · {entry.protocol}</b><span>{entry.endpoint}</span><small>{new Date(entry.timestamp_ms).toLocaleString("ru-RU")} · {entry.elapsed_ms} мс</small>{entry.detail && <p>{entry.detail}</p>}</div>
+                <span className={entry.success ? "state-pill on" : "state-pill"}>{entry.success ? "OK" : "FAIL"}</span>
               </article>)}</div>}
           </div>
         </> : section === "settings" ? <>
-          <div className="page-heading"><div><div className="eyebrow">МОНИТОРИНГ И МАРШРУТЫ</div><h1>Настройки</h1><p>Параметры автоматического переключения и способов подключения.</p></div><button className="button primary" disabled={!desktopSettings || settingsSaving} onClick={() => void saveDesktopSettings()}>{settingsSaving ? <LoaderCircle size={14} className="spin"/> : <Save size={14}/>}Сохранить</button></div>
+          <div className="page-heading"><div><div className="eyebrow">MONITORING & ROUTING</div><h1>Настройки</h1><p>Параметры автосмены и транспортов, синхронизированные с мобильной моделью.</p></div><button className="button primary" disabled={!desktopSettings || settingsSaving} onClick={() => void saveDesktopSettings()}>{settingsSaving ? <LoaderCircle size={14} className="spin"/> : <Save size={14}/>}Сохранить</button></div>
           {settingsLoading || !desktopSettings ? <div className="empty-state"><LoaderCircle size={20} className="spin"/><b>Загружаю настройки</b></div> : <>
             <section className="panel settings-panel">
-              <div className="panel-heading"><div><h3>Автоматическое переключение</h3><p>Контролирует выбранный внешний прокси MTProto или SOCKS5</p></div><span className={desktopSettings.auto_failover_enabled ? "state-pill on" : "state-pill"}>{desktopSettings.auto_failover_enabled ? "ВКЛЮЧЕНО" : "ВЫКЛЮЧЕНО"}</span></div>
-              <label className="settings-toggle"><span><b>Включить авто-переключение</b><small>Проверять активный прокси и искать замену при серии ошибок</small></span><input type="checkbox" checked={desktopSettings.auto_failover_enabled} onChange={event => setDesktopSettings({ ...desktopSettings, auto_failover_enabled: event.target.checked })}/></label>
+              <div className="panel-heading"><div><h3>Автоматическое переключение</h3><p>Контролирует выбранный внешний MTProto / SOCKS5 upstream</p></div><span className={desktopSettings.auto_failover_enabled ? "state-pill on" : "state-pill"}>{desktopSettings.auto_failover_enabled ? "ENABLED" : "DISABLED"}</span></div>
+              <label className="settings-toggle"><span><b>Включить авто-переключение</b><small>Проверять активный upstream и искать замену при серии ошибок</small></span><input type="checkbox" checked={desktopSettings.auto_failover_enabled} onChange={event => setDesktopSettings({ ...desktopSettings, auto_failover_enabled: event.target.checked })}/></label>
               <label className="form-field"><span>ИНТЕРВАЛ ПРОВЕРКИ · СЕКУНДЫ (30–180)</span><input type="number" min={30} max={180} step={5} value={desktopSettings.check_interval_seconds} onChange={event => setDesktopSettings({ ...desktopSettings, check_interval_seconds: Number(event.target.value) })}/></label>
-              <label className="form-field"><span>ПОРОГ ОШИБОК ДО ПЕРЕКЛЮЧЕНИЯ (2–5)</span><input type="number" min={2} max={5} value={desktopSettings.failure_threshold} onChange={event => setDesktopSettings({ ...desktopSettings, failure_threshold: Number(event.target.value) })}/></label>
+              <label className="form-field"><span>ПОРОГ ОШИБОК ДО FAILOVER (2–5)</span><input type="number" min={2} max={5} value={desktopSettings.failure_threshold} onChange={event => setDesktopSettings({ ...desktopSettings, failure_threshold: Number(event.target.value) })}/></label>
               <label className="form-field"><span>ОБНОВЛЕНИЕ КАТАЛОГА · МИНУТЫ (2–30)</span><input type="number" min={2} max={30} value={desktopSettings.catalog_refresh_minutes} onChange={event => setDesktopSettings({ ...desktopSettings, catalog_refresh_minutes: Number(event.target.value) })}/></label>
-              <label className="form-field"><span>ПАУЗА ДЛЯ НЕРАБОЧЕГО ПРОКСИ · СЕКУНДЫ</span><input type="number" min={120} max={3600} step={60} value={desktopSettings.failed_profile_cooldown_seconds} onChange={event => setDesktopSettings({ ...desktopSettings, failed_profile_cooldown_seconds: Number(event.target.value) })}/></label>
-              <label className="form-field"><span>ПАУЗА МЕЖДУ ПЕРЕКЛЮЧЕНИЯМИ · СЕКУНДЫ</span><input type="number" min={30} max={600} step={30} value={desktopSettings.switch_cooldown_seconds} onChange={event => setDesktopSettings({ ...desktopSettings, switch_cooldown_seconds: Number(event.target.value) })}/></label>
-              <div className="panel-footer"><span>Активный прокси: {status.selected_upstream ?? "АВТО · автоматический резервный маршрут"}</span><span>{status.failure_streak} / {desktopSettings.failure_threshold} ошибок · переключений: {status.switch_count}</span></div>
+              <label className="form-field"><span>COOLDOWN ОТКАЗАВШЕГО ПРОКСИ · СЕКУНДЫ</span><input type="number" min={120} max={3600} step={60} value={desktopSettings.failed_profile_cooldown_seconds} onChange={event => setDesktopSettings({ ...desktopSettings, failed_profile_cooldown_seconds: Number(event.target.value) })}/></label>
+              <label className="form-field"><span>ПАУЗА МЕЖДУ ПОПЫТКАМИ SWITCH · СЕКУНДЫ</span><input type="number" min={30} max={600} step={30} value={desktopSettings.switch_cooldown_seconds} onChange={event => setDesktopSettings({ ...desktopSettings, switch_cooldown_seconds: Number(event.target.value) })}/></label>
+              <div className="panel-footer"><span>Активный upstream: {status.selected_upstream ?? "AUTO transport fallback"}</span><span>{status.failure_streak} / {desktopSettings.failure_threshold} ошибок · переключений: {status.switch_count}</span></div>
             </section>
             <section className="panel settings-panel">
-              <div className="panel-heading"><div><h3>Транспорты</h3><p>Настройки прямого WebSocket Telegram и резервного маршрута через Cloudflare</p></div></div>
-              <label className="settings-toggle"><span><b>Сначала прямое подключение Telegram WebSocket</b><small>Сначала проверять доступные перенаправления серверов Telegram</small></span><input type="checkbox" checked={desktopSettings.direct_websocket_first} onChange={event => setDesktopSettings({ ...desktopSettings, direct_websocket_first: event.target.checked })}/></label>
-              <label className="settings-toggle"><span><b>Резервный WebSocket через Cloudflare</b><small>Переходить к резервному доменному пулу, если прямой маршрут недоступен</small></span><input type="checkbox" checked={desktopSettings.cloudflare_websocket_enabled} onChange={event => setDesktopSettings({ ...desktopSettings, cloudflare_websocket_enabled: event.target.checked })}/></label>
+              <div className="panel-heading"><div><h3>Транспорты</h3><p>Настройки прямого Telegram WebSocket и резервного Cloudflare маршрута</p></div></div>
+              <label className="settings-toggle"><span><b>Прямой Telegram WebSocket первым</b><small>Сначала проверять поддерживаемые redirect DC маршруты</small></span><input type="checkbox" checked={desktopSettings.direct_websocket_first} onChange={event => setDesktopSettings({ ...desktopSettings, direct_websocket_first: event.target.checked })}/></label>
+              <label className="settings-toggle"><span><b>Cloudflare WebSocket fallback</b><small>Переходить к резервному доменному пулу, если прямой маршрут недоступен</small></span><input type="checkbox" checked={desktopSettings.cloudflare_websocket_enabled} onChange={event => setDesktopSettings({ ...desktopSettings, cloudflare_websocket_enabled: event.target.checked })}/></label>
               <label className="settings-toggle"><span><b>Автооптимизация соединения</b><small>Разрешить обновление автоматически управляемого профиля при значимом улучшении</small></span><input type="checkbox" checked={desktopSettings.auto_optimize_connection} onChange={event => setDesktopSettings({ ...desktopSettings, auto_optimize_connection: event.target.checked })}/></label>
-              <label className="form-field"><span>ИНТЕРВАЛ ПРОВЕРКИ WEBSOCKET · СЕКУНДЫ</span><input type="number" min={30} max={600} step={15} value={desktopSettings.websocket_ping_interval_seconds} onChange={event => setDesktopSettings({ ...desktopSettings, websocket_ping_interval_seconds: Number(event.target.value) })}/></label>
+              <label className="form-field"><span>WEBSOCKET PING · СЕКУНДЫ</span><input type="number" min={30} max={600} step={15} value={desktopSettings.websocket_ping_interval_seconds} onChange={event => setDesktopSettings({ ...desktopSettings, websocket_ping_interval_seconds: Number(event.target.value) })}/></label>
             </section>
             <section className="panel settings-panel">
-              <div className="panel-heading"><div><h3>Сеть TGU</h3><p>Анонимная статистика качества общедоступных прокси</p></div></div>
+              <div className="panel-heading"><div><h3>TGU Community Network</h3><p>Анонимная статистика качества публичных узлов</p></div></div>
               <label className="settings-toggle"><span><b>Автоматически отправлять результаты сканирования</b><small>Включено по умолчанию. После автоподбора передаются ID прокси, результат и RTT; IP, аккаунт Telegram и содержимое трафика не отправляются. Можно отключить здесь.</small></span><input type="checkbox" checked={desktopSettings.community_feedback_enabled} onChange={event => setDesktopSettings({ ...desktopSettings, community_feedback_enabled: event.target.checked })}/></label>
             </section>
             <section className="panel settings-panel">
               <div className="panel-heading"><div><h3>Состояние мониторинга</h3><p>Текущие данные движка</p></div></div>
               <div className="catalog-summary">
-                <div><span>ВРЕМЯ РАБОТЫ</span><strong>{formatDuration(status.uptime_seconds)}</strong></div>
+                <div><span>UPTIME</span><strong>{formatDuration(status.uptime_seconds)}</strong></div>
                 <div><span>ПОСЛЕДНЯЯ ПРОВЕРКА</span><strong>{status.last_check_epoch_ms ? new Date(status.last_check_epoch_ms).toLocaleTimeString("ru-RU") : "—"}</strong></div>
-                <div><span>ПОСЛЕДНЯЯ ЗАДЕРЖКА</span><strong>{status.last_check_latency_ms != null ? `${status.last_check_latency_ms} мс` : "—"}</strong></div>
-                <div><span>ПЕРЕКЛЮЧЕНИЙ</span><strong>{status.switch_count}</strong></div>
+                <div><span>ПОСЛЕДНИЙ RTT</span><strong>{status.last_check_latency_ms != null ? `${status.last_check_latency_ms} мс` : "—"}</strong></div>
+                <div><span>SWITCHES</span><strong>{status.switch_count}</strong></div>
               </div>
             </section>
           </>}
         </> : section === "diagnostics" ? <>
-          <div className="page-heading"><div><div className="eyebrow">СЕТЬ И СЕРВЕРЫ TELEGRAM</div><h1>Диагностика</h1><p>Проверка HTTPS/TLS доменов Telegram, Cloudflare и TCP-портов DC1–DC5.</p></div><button className="button primary" disabled={diagnosticsRunning} onClick={() => void runDiagnostics()}>{diagnosticsRunning ? <LoaderCircle size={14} className="spin"/> : <Activity size={14}/>}Запустить диагностику</button></div>
+          <div className="page-heading"><div><div className="eyebrow">NETWORK & TELEGRAM DC</div><h1>Диагностика</h1><p>Проверка HTTPS/TLS доменов Telegram, Cloudflare и TCP-портов DC1–DC5.</p></div><button className="button primary" disabled={diagnosticsRunning} onClick={() => void runDiagnostics()}>{diagnosticsRunning ? <LoaderCircle size={14} className="spin"/> : <Activity size={14}/>}Запустить диагностику</button></div>
+          <section className="panel">
+            <div className="panel-heading">
+              <div><h3>TGU DPI · технический PoC</h3><p>Проверка WinDivert и окружения. Этот тест не запускает фильтрацию и не меняет сетевые настройки.</p></div>
+              <button className="button secondary" disabled={dpiProbeLoading} onClick={() => void runDpiProbe()}>{dpiProbeLoading ? <LoaderCircle size={14} className="spin"/> : <ShieldCheck size={14}/>}Проверить DPI</button>
+            </div>
+            {dpiProbe ? <>
+              <div className="catalog-summary">
+                <div><span>ПЛАТФОРМА</span><strong>{dpiProbe.platform}</strong></div>
+                <div><span>СТАТУС</span><strong>{dpiProbe.status}</strong></div>
+                <div><span>ADMIN</span><strong>{dpiProbe.elevated ? "Да" : "Нет"}</strong></div>
+                <div><span>ПЕРЕХВАТ</span><strong>{dpiProbe.runtime_started ? "Активен" : "Не запускался"}</strong></div>
+              </div>
+              <div className="diagnostic-row"><span className={dpiProbe.winws2_found ? "diagnostic-dot success" : "diagnostic-dot"}/><div><b>winws2.exe</b><small>{dpiProbe.winws2_found ? "Найден" : "Не найден"}</small></div></div>
+              <div className="diagnostic-row"><span className={dpiProbe.windivert_dll_found ? "diagnostic-dot success" : "diagnostic-dot"}/><div><b>WinDivert.dll</b><small>{dpiProbe.windivert_dll_found ? "Найдена" : "Не найдена"}</small></div></div>
+              <div className="diagnostic-row"><span className={dpiProbe.windivert_driver_found ? "diagnostic-dot success" : "diagnostic-dot"}/><div><b>WinDivert64.sys</b><small>{dpiProbe.windivert_driver_found ? "Найден" : "Не найден"}</small></div></div>
+              <div className="diagnostic-row"><span className={dpiProbe.cygwin_runtime_found ? "diagnostic-dot success" : "diagnostic-dot"}/><div><b>cygwin1.dll</b><small>{dpiProbe.cygwin_runtime_found ? "Найдена" : "Не найдена"}</small></div></div>
+              <div className="panel-footer"><span>{dpiProbe.message} Папка проверки: {dpiProbe.resource_directory || "—"}</span></div>
+            </> : <div className="empty-state"><span>Проверка ещё не запускалась.</span></div>}
+          </section>
           {diagnostics && <>
             <div className="catalog-summary">
-              <div><span>HTTPS ДО TELEGRAM</span><strong>{diagnostics.network_successes} / {diagnostics.network_total}</strong></div>
-              <div><span>СЕРВЕР TELEGRAM TCP</span><strong>{diagnostics.dc_successes} / {diagnostics.dc_total}</strong></div>
-              <div><span>СОЕДИНЕНИЕ</span><strong>{status.engine_ready ? "TGU запущен" : "TGU остановлен"}</strong></div>
+              <div><span>TELEGRAM / HTTPS</span><strong>{diagnostics.network_successes} / {diagnostics.network_total}</strong></div>
+              <div><span>TELEGRAM DC TCP</span><strong>{diagnostics.dc_successes} / {diagnostics.dc_total}</strong></div>
+              <div><span>СОЕДИНЕНИЕ</span><strong>{status.engine_ready ? "TGU running" : "TGU stopped"}</strong></div>
               <div><span>ЗАПУСК ТЕСТА</span><strong>{new Date(diagnostics.generated_at_ms).toLocaleTimeString("ru-RU")}</strong></div>
             </div>
             <section className="panel">
-              <div className="panel-heading"><div><h3>Сеть и TLS</h3><p>TCP/443, TLS-соединение и HTTP-ответ</p></div></div>
-              {diagnostics.network_checks.map(check => <div className="diagnostic-row" key={check.host}><span className={check.tls_http ? "diagnostic-dot success" : check.tcp_443 ? "diagnostic-dot warning" : "diagnostic-dot"}/><div><b>{check.host}</b><small>{localizeTechnicalMessage(check.detail)}</small></div><strong>{check.elapsed_ms} мс</strong></div>)}
+              <div className="panel-heading"><div><h3>Сеть и TLS</h3><p>TCP/443, TLS handshake и HTTP-ответ</p></div></div>
+              {diagnostics.network_checks.map(check => <div className="diagnostic-row" key={check.host}><span className={check.tls_http ? "diagnostic-dot success" : check.tcp_443 ? "diagnostic-dot warning" : "diagnostic-dot"}/><div><b>{check.host}</b><small>{check.detail}</small></div><strong>{check.elapsed_ms} мс</strong></div>)}
             </section>
             <section className="panel">
-              <div className="panel-heading"><div><h3>Серверы Telegram и точки доступа</h3><p>TCP-подключение к эталонным IPv4/IPv6-адресам на 80 и 443</p></div></div>
-              {diagnostics.dc_checks.map((check, index) => <div className="diagnostic-row" key={`${check.address}-${check.port}-${index}`}><span className={check.reachable ? "diagnostic-dot success" : "diagnostic-dot"}/><div><b>{check.dc_label} · {check.address}:{check.port}</b><small>{check.address_family} · {diagnosticSourceLabel(check.source)} · {localizeTechnicalMessage(check.detail)}</small></div><strong>{check.elapsed_ms} мс</strong></div>)}
-              <div className="panel-footer"><span>Список адресов — диагностический эталонный список; актуальный список DC определяется Telegram.</span></div>
+              <div className="panel-heading"><div><h3>Telegram DC и access points</h3><p>TCP-подключение к reference IPv4/IPv6 адресам на 80 и 443</p></div></div>
+              {diagnostics.dc_checks.map((check, index) => <div className="diagnostic-row" key={`${check.address}-${check.port}-${index}`}><span className={check.reachable ? "diagnostic-dot success" : "diagnostic-dot"}/><div><b>{check.dc_label} · {check.address}:{check.port}</b><small>{check.address_family} · {check.source} · {check.detail}</small></div><strong>{check.elapsed_ms} мс</strong></div>)}
+              <div className="panel-footer"><span>Список адресов — диагностический reference snapshot; актуальный список DC определяется Telegram.</span></div>
             </section>
           </>}
           {!diagnostics && <div className="empty-state"><div className="empty-icon"><Activity size={20}/></div><b>Диагностика ещё не запускалась</b><span>Проверка покажет, какие домены и DC доступны из текущей сети. Она не меняет системные сетевые настройки.</span><button className="button secondary" disabled={diagnosticsRunning} onClick={() => void runDiagnostics()}>Запустить диагностику</button></div>}
+        </> : section === "account" ? <>
+          <div className="page-heading"><div><div className="eyebrow">RNMDTEAM / IDENTITY</div><h1>RNMD ID</h1><p>Единая учётная запись TGU для Android и Windows. Вход через Telegram.</p></div>
+            <button type="button" className="icon-button" title="Обновить профиль" disabled={rnmdBusy || rnmdLoading} onClick={() => void reloadRnmd()}><RefreshCw size={17} className={rnmdLoading ? "spin" : ""}/></button></div>
+          <section className="rnmd-panel">
+            {rnmdLoading ? <div className="rnmd-loading"><LoaderCircle size={20} className="spin"/>Загружаю RNMD ID…</div> :
+              rnmdAccount ? <>
+                <div className="rnmd-profile">
+                  <div className="rnmd-avatar">{rnmdAccount.avatar_url ? <img src={rnmdAccount.avatar_url} alt="" referrerPolicy="no-referrer"/> : <UserRound size={30}/>}</div>
+                  <div className="rnmd-identity"><span className="eyebrow">ПРОФИЛЬ RNMD ID</span><h2>{rnmdAccount.display_name}</h2><p>{rnmdAccount.telegram_username ? `@${rnmdAccount.telegram_username}` : "Telegram · аккаунт подключён"}</p></div>
+                  <span className="state-pill on">{rnmdAccount.has_tgu_plus ? "TGU+" : "TGU FREE"}</span>
+                </div>
+                <div className="rnmd-info-grid">
+                  <div><span>УЧЁТНАЯ ЗАПИСЬ</span><strong>{rnmdAccount.user_id}</strong></div>
+                  <div><span>УСТРОЙСТВА</span><strong>{rnmdAccount.devices.length}</strong></div>
+                  <div><span>ПОКУПКИ</span><strong>{rnmdAccount.orders.length}</strong></div>
+                </div>
+                <div className="rnmd-heading"><h3>Подключённые устройства</h3><span>RNMD ID</span></div>
+                {rnmdAccount.devices.length ? <div className="rnmd-list">{rnmdAccount.devices.map(d => <div className="rnmd-list-row" key={d.id}><Server size={17}/><div><b>{d.device_name}</b><small>{d.platform} · {d.last_seen_at ? new Date(d.last_seen_at).toLocaleString("ru-RU") : "Нет активности"}</small></div></div>)}</div> : <p className="rnmd-muted">Устройства пока не зарегистрированы.</p>}
+                <div className="rnmd-heading"><h3>История покупок</h3><span>{rnmdAccount.orders.length} записей</span></div>
+                {rnmdAccount.orders.length ? <div className="rnmd-list">{rnmdAccount.orders.map(o => <div className="rnmd-list-row" key={o.id}><Bookmark size={17}/><div><b>{o.product_code}</b><small>{o.status} · {(o.amount_minor / 100).toLocaleString("ru-RU")} {o.currency}</small></div></div>)}</div> : <p className="rnmd-muted">Покупок пока нет.</p>}
+                <div className="rnmd-actions"><button className="button secondary" type="button" disabled={rnmdBusy} onClick={() => void logoutRnmd()}><LogOut size={16}/>{rnmdBusy ? "Выход…" : "Выйти из RNMD ID"}</button></div>
+              </> :
+              <div className="rnmd-guest">
+                <div className="rnmd-guest-icon"><UserRound size={29}/></div><div className="eyebrow">ЕДИНЫЙ АККАУНТ RNMDTEAM</div>
+                <h2>Один аккаунт. Все устройства.</h2>
+                <p>Войди через Telegram, чтобы открыть профиль RNMD ID, список устройств и покупки. Использовать TGU можно и без входа.</p>
+                <button type="button" className="button primary" disabled={rnmdBusy} onClick={() => void loginRnmd()}>{rnmdBusy ? <LoaderCircle className="spin" size={16}/> : <UserRound size={16}/>} {rnmdBusy ? "Ожидаю вход через Telegram…" : "Продолжить с Telegram"}</button>
+                <span className="rnmd-muted">Авторизация откроется в системном браузере. Понадобится подтверждение Telegram.</span>
+              </div>}
+            {rnmdError && <div className="rnmd-error" role="alert">{rnmdError}</div>}
+          </section>
         </> : <section className="placeholder-page">
-          <div className="eyebrow">TGU ПК-КЛИЕНТ</div><h1>{title}</h1>
+          <div className="eyebrow">TGU DESKTOP</div><h1>{title}</h1>
           <p>TGU Desktop — настольный клиент экосистемы TGU.</p>
-          <div className="empty-state"><div className="empty-icon"><CircleHelp size={22}/></div><b>TGU для ПК 0.4</b><span>Локальный MTProto-прокси, каталог прокси, зашифрованные профили и диагностика Telegram DC.</span></div>
+          <div className="empty-state"><div className="empty-icon"><CircleHelp size={22}/></div><b>TGU Desktop v{appVersion}</b><span>Локальный MTProto relay, каталог прокси, шифрованные профили и диагностика Telegram DC.</span></div>
         </section>}
       </div>
     </main>

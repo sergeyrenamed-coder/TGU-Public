@@ -1,73 +1,19 @@
 mod engine;
 mod proxy;
 mod ru_health;
+mod rnmd_id;
+mod secure_session;
 mod warm_standby;
 mod profiles;
 mod settings;
 mod diagnostics;
+mod dpi;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .manage(engine::EngineState::default())
         .plugin(tauri_plugin_opener::init())
-        .setup(|app| {
-            use tauri::{
-                menu::{Menu, MenuItem},
-                tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
-                Manager,
-            };
-
-            let show_item = MenuItem::with_id(app, "show", "Открыть TGU", true, None::<&str>)?;
-            let quit_item = MenuItem::with_id(app, "quit", "Полностью выйти", true, None::<&str>)?;
-            let menu = Menu::with_items(app, &[&show_item, &quit_item])?;
-
-            let mut tray = TrayIconBuilder::new()
-                .menu(&menu)
-                .tooltip("TGU Desktop")
-                .show_menu_on_left_click(false)
-                .on_menu_event(|app, event| match event.id.as_ref() {
-                    "show" => {
-                        if let Some(window) = app.get_webview_window("main") {
-                            let _ = window.unminimize();
-                            let _ = window.show();
-                            let _ = window.set_focus();
-                        }
-                    }
-                    "quit" => app.exit(0),
-                    _ => {}
-                })
-                .on_tray_icon_event(|tray, event| {
-                    if let TrayIconEvent::Click {
-                        button: MouseButton::Left,
-                        button_state: MouseButtonState::Up,
-                        ..
-                    } = event
-                    {
-                        let app = tray.app_handle();
-                        if let Some(window) = app.get_webview_window("main") {
-                            let _ = window.unminimize();
-                            let _ = window.show();
-                            let _ = window.set_focus();
-                        }
-                    }
-                });
-
-            if let Some(icon) = app.default_window_icon() {
-                tray = tray.icon(icon.clone());
-            }
-
-            tray.build(app)?;
-            Ok(())
-        })
-        .on_window_event(|window, event| {
-            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
-                                                                           
-                                                                    
-                api.prevent_close();
-                let _ = window.hide();
-            }
-        })
         .invoke_handler(tauri::generate_handler![
             proxy::catalog_load,
             proxy::catalog_refresh,
@@ -86,12 +32,16 @@ pub fn run() {
             settings::settings_load,
             settings::settings_save,
             diagnostics::diagnostics_run,
+            dpi::dpi_probe,
             engine::engine_status,
             engine::engine_start,
             engine::engine_stop,
             engine::engine_clear_upstream,
             engine::engine_open_in_telegram,
-            engine::engine_open_in_telegram_if_needed
+            engine::engine_open_in_telegram_if_needed,
+            rnmd_id::rnmd_login,
+            rnmd_id::rnmd_status,
+            rnmd_id::rnmd_logout
         ])
         .run(tauri::generate_context!())
         .expect("error while running TGU Desktop");

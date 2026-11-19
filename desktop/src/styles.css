@@ -7,7 +7,7 @@ button{font:inherit;color:inherit;cursor:pointer}
 .app-shell{display:flex;min-height:100vh;background:#080808}
 .sidebar{width:246px;flex:0 0 246px;background:#101010;border-right:1px solid #292929;padding:25px 15px 16px;display:flex;flex-direction:column}
 .brand{display:flex;align-items:center;gap:12px;padding:2px 10px 36px}
-.brand-mark{width:37px;height:37px;border:0;border-radius:10px;display:grid;place-items:center;font-size:12px;font-weight:800;letter-spacing:-1px}
+.brand-mark{width:37px;height:37px;border:1px solid #eee;border-radius:10px;display:grid;place-items:center;font-size:12px;font-weight:800;letter-spacing:-1px}
 .brand-caption{display:flex;flex-direction:column;gap:2px}.brand-caption b{font-size:15px;letter-spacing:.12em}.brand-caption span{font:9px "DM Mono",monospace;color:#858585;letter-spacing:.22em}
 .nav-label,.eyebrow{font:10px "DM Mono",monospace;letter-spacing:.13em;color:#777}
 .nav-label{padding:0 11px 12px}
@@ -18,13 +18,7 @@ button{font:inherit;color:inherit;cursor:pointer}
 .sidebar-version{border-top:1px solid #292929;margin-top:17px;padding:17px 8px 0;color:#aaa;font-size:10px;display:flex;align-items:center;gap:7px}
 .sidebar-version span:last-child{margin-left:auto;color:#686868;font-family:"DM Mono",monospace}
 .version-dot{width:6px;height:6px;background:#aaa;border-radius:50%}
-.main{flex:1;min-width:0}.topbar{height:48px;border-bottom:1px solid #242424;background:#0b0b0b;display:flex;align-items:center;justify-content:space-between;padding:0 12px 0 24px;gap:16px;user-select:none}
-.topbar-drag{height:100%;min-width:0;flex:1;display:flex;align-items:center}
-.topbar-drag .breadcrumbs{height:100%;display:flex;align-items:center}
-.window-controls{height:100%;display:flex;align-items:center;gap:3px;margin-left:5px;-webkit-app-region:no-drag}
-.window-controls button{width:38px;height:28px;border:0;border-radius:6px;background:transparent;color:#999;display:grid;place-items:center;padding:0;transition:background .15s ease,color .15s ease}
-.window-controls button:hover{background:#252525;color:#fff}
-.window-controls button.window-close:hover{background:#c42b1c;color:#fff}
+.main{flex:1;min-width:0}.topbar{height:64px;border-bottom:1px solid #242424;display:flex;align-items:center;justify-content:space-between;padding:0 38px}
 .breadcrumbs{display:flex;align-items:center;gap:9px;color:#777;font-size:12px}.breadcrumbs span{color:#eee}
 .topbar-right{display:flex;align-items:center;gap:19px}.local-label{font:9px "DM Mono",monospace;color:#888;letter-spacing:.08em;display:flex;align-items:center;gap:7px}.local-label span{width:6px;height:6px;background:#999;border-radius:50%}
 .avatar{width:29px;height:29px;border:1px solid #3b3b3b;border-radius:50%;display:grid;place-items:center;font-size:11px;font-weight:700}
@@ -38,7 +32,7 @@ button{font:inherit;color:inherit;cursor:pointer}
 .section-title{display:flex;align-items:center;justify-content:space-between;margin-bottom:13px}.section-title h3,.panel h3{font-size:14px;margin:0;font-weight:600}.section-title>span{font:9px "DM Mono",monospace;color:#626262;letter-spacing:.08em}
 .metric-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:13px;margin-bottom:25px}
 .metric-card{background:#111;border:1px solid #292929;border-radius:9px;padding:17px 18px;min-height:112px}.metric-top{display:flex;justify-content:space-between;color:#858585;font:9px "DM Mono",monospace;letter-spacing:.08em}.metric-card strong{display:block;font-size:25px;margin:10px 0 4px;letter-spacing:-.7px}.metric-card .metric-text{font-size:17px;margin-top:15px}.metric-card small{color:#707070;font-size:10px}
-.content-grid{display:grid;grid-template-columns:1.2fr .8fr;gap:14px;margin-top:18px}.panel{background:#111;border:1px solid #292929;border-radius:9px;padding:19px 19px 0;min-width:0}.panel-heading{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:17px}.panel-heading p{font-size:11px;color:#777;margin:5px 0 0}.state-pill{font:9px "DM Mono",monospace;color:#999;border:1px solid #414141;border-radius:20px;padding:5px 8px}.state-pill.on{color:#eee;border-color:#777}
+.content-grid{display:grid;grid-template-columns:1.2fr .8fr;gap:14px}.panel{background:#111;border:1px solid #292929;border-radius:9px;padding:19px 19px 0;min-width:0}.panel-heading{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:17px}.panel-heading p{font-size:11px;color:#777;margin:5px 0 0}.state-pill{font:9px "DM Mono",monospace;color:#999;border:1px solid #414141;border-radius:20px;padding:5px 8px}.state-pill.on{color:#eee;border-color:#777}
 .connection-row{display:flex;align-items:center;gap:12px;padding:13px 0;border-top:1px solid #242424}.connection-icon{width:34px;height:34px;border:1px solid #333;border-radius:7px;display:grid;place-items:center;color:#aaa}.connection-info{display:flex;flex-direction:column;gap:4px;min-width:0}.connection-info b{font-size:11px;font-weight:600}.connection-info span{font-size:10px;color:#777}.muted{margin-left:auto;color:#777}
 .panel-footer{border-top:1px solid #242424;padding:13px 0;display:flex;justify-content:space-between;align-items:center;gap:10px}.panel-footer>span{font-size:9px;color:#777}.text-button{display:flex;align-items:center;gap:3px;background:none;border:0;color:#ddd;font-size:10px;white-space:nowrap}
 .quick-panel{padding-bottom:8px}.quick-action{width:100%;display:flex;align-items:center;gap:11px;text-align:left;padding:13px 0;background:none;border:0;border-top:1px solid #242424}.quick-action>span{width:33px;height:33px;display:grid;place-items:center;border:1px solid #333;border-radius:7px;color:#bbb}.quick-action div{display:flex;flex-direction:column;gap:4px;flex:1}.quick-action b{font-size:11px;font-weight:600}.quick-action small{font-size:10px;color:#777}.quick-action>svg{color:#777}.quick-action:hover b{color:#fff}
@@ -107,7 +101,7 @@ button{font:inherit;color:inherit;cursor:pointer}
 }
 
 
-                                                                                         
+/* Live proxy auto-selection progress — monochrome, same interaction model as Android. */
 .auto-progress-panel{display:flex;flex-direction:column;gap:13px}
 .auto-progress-count{font:12px "DM Mono",monospace;color:#f2f2f2;white-space:nowrap}
 .auto-progress-track{height:6px;overflow:hidden;border-radius:20px;background:#2a2a2a}
@@ -125,7 +119,7 @@ button{font:inherit;color:inherit;cursor:pointer}
 }
 
 
-                                                                                 
+/* Android parity pages — desktop layouts, same monochrome component language. */
 .profile-list{display:flex;flex-direction:column;gap:9px;padding-bottom:14px}
 .profile-card{border:1px solid #292929;border-radius:8px;background:#151515;padding:14px 15px}
 .profile-card-main{display:flex;justify-content:space-between;align-items:flex-start;gap:14px}
@@ -176,3 +170,72 @@ button{font:inherit;color:inherit;cursor:pointer}
   .profile-card-main{flex-direction:column}
   .history-entry{flex-wrap:wrap}
 }
+
+
+/* v0.4 shell: only the content pane scrolls; prevent the OS WebView gutter. */
+html,body,#root{width:100%;height:100%;min-width:0;min-height:0;margin:0;overflow:hidden}
+.app-shell{width:100%;height:100vh;height:100dvh;min-height:0;overflow:hidden;display:flex}
+.sidebar{height:100%;min-height:0;width:76px;flex:0 0 76px;padding:17px 12px 14px;overflow:hidden;transition:width .22s ease,flex-basis .22s ease}
+.sidebar.expanded{width:248px;flex-basis:248px}
+.sidebar-head{display:flex;align-items:center;flex-direction:column;gap:10px;flex-shrink:0}
+.sidebar.expanded .sidebar-head{flex-direction:row;justify-content:space-between}
+.sidebar .brand{padding:0;gap:9px;min-height:39px;flex-shrink:0;justify-content:center}
+.sidebar .brand-mark{flex-shrink:0;width:37px;height:37px}
+.sidebar .brand-caption{white-space:nowrap;overflow:hidden}
+.sidebar.collapsed .brand-caption{display:none}
+.sidebar-toggle{height:32px;width:40px;flex-shrink:0;border:1px solid #353535;border-radius:8px;background:#171717;color:#bfbfbf;display:grid;place-items:center;transition:.15s}
+.sidebar-toggle:hover{background:#262626;color:#fff}
+.sidebar.expanded .sidebar-toggle{width:33px}
+.sidebar .nav-label{padding:19px 8px 10px;white-space:nowrap;overflow:hidden}
+.sidebar.collapsed .nav-label{font-size:0;line-height:0;height:18px;padding:0}
+.sidebar-nav-scroll{flex:1;min-height:0;overflow-y:auto;overflow-x:hidden;scrollbar-width:none}
+.sidebar-nav-scroll::-webkit-scrollbar{display:none}
+.sidebar .nav-item{flex:0 0 auto;min-width:0;padding:0 12px;gap:13px;white-space:nowrap;overflow:hidden}
+.sidebar .nav-icon{flex:0 0 19px}
+.sidebar .nav-text{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sidebar.collapsed .nav-item{width:48px;justify-content:center;padding:0;gap:0}
+.sidebar.collapsed .nav-text{display:none}
+.sidebar-bottom{gap:5px;min-width:0;flex-shrink:0}
+.sidebar-version{gap:7px;min-height:40px;margin-top:6px;padding:10px 3px 0;white-space:nowrap;min-width:0}
+.sidebar-version .version-dot{flex:0 0 6px}
+.sidebar-version .version-name{font-size:10px;overflow:hidden;text-overflow:ellipsis}
+.sidebar-version .version-number{margin-left:auto;color:#858585;font:10px "DM Mono",monospace}
+.sidebar.collapsed .sidebar-version{justify-content:center}
+.sidebar.collapsed .version-name,.sidebar.collapsed .version-number{display:none}
+.main{height:100%;min-height:0;flex:1;min-width:0;display:flex;flex-direction:column;overflow:hidden}
+.topbar{flex:0 0 64px;min-height:0}
+.page{width:100%;max-width:none;flex:1;min-height:0;overflow-y:auto;overflow-x:hidden;overscroll-behavior:contain;scrollbar-width:none;scroll-behavior:smooth}
+.page::-webkit-scrollbar{display:none}
+.topbar-account{height:34px;width:34px;border-radius:9px;display:grid;place-items:center;border:1px solid #393939;background:#171717;color:#ddd;padding:0;overflow:hidden}
+.topbar-account img,.rnmd-avatar img{width:100%;height:100%;object-fit:cover}
+.topbar-account:hover{background:#282828;border-color:#777}
+.rnmd-panel{background:#111;border:1px solid #292929;border-radius:12px;padding:25px;max-width:980px}
+.rnmd-guest{text-align:center;display:flex;flex-direction:column;align-items:center;gap:15px;padding:42px 12px}
+.rnmd-guest h2{font-size:24px;letter-spacing:-.8px;margin:0}
+.rnmd-guest p{font-size:12px;line-height:1.8;color:#999;max-width:460px;margin:0 0 10px}
+.rnmd-guest-icon{display:grid;place-items:center;width:64px;height:64px;border:1px solid #444;border-radius:16px;background:#1b1b1b}
+.rnmd-guest .button{max-width:260px;justify-content:center}
+.rnmd-muted{font-size:11px;color:#818181;line-height:1.6}
+.rnmd-error{color:#ffcece;background:#301919;border:1px solid #6d3030;border-radius:9px;padding:13px;margin-top:15px;font-size:12px;overflow-wrap:anywhere}
+.rnmd-loading{display:flex;align-items:center;gap:12px;color:#aaa;padding:40px 0}
+.rnmd-profile{display:flex;align-items:center;gap:18px;border-bottom:1px solid #292929;padding-bottom:23px}
+.rnmd-avatar{height:66px;width:66px;flex:0 0 66px;border-radius:16px;border:1px solid #404040;background:#202020;overflow:hidden;display:grid;place-items:center}
+.rnmd-identity{flex:1;min-width:0}
+.rnmd-identity h2{font-size:22px;margin:6px 0 4px;overflow-wrap:anywhere}
+.rnmd-identity p{margin:0;color:#aaa;font-size:12px}
+.rnmd-info-grid{display:grid;grid-template-columns:2fr 1fr 1fr;gap:12px;padding:22px 0}
+.rnmd-info-grid>div{padding:14px;background:#171717;border:1px solid #2d2d2d;border-radius:8px;min-width:0}
+.rnmd-info-grid span{display:block;font:9px "DM Mono",monospace;color:#888;margin-bottom:9px;letter-spacing:.07em}
+.rnmd-info-grid strong{font:11px "DM Mono",monospace;overflow-wrap:anywhere}
+.rnmd-heading{display:flex;justify-content:space-between;align-items:center;margin:24px 0 12px;gap:12px}
+.rnmd-heading h3{font-size:13px;margin:0}
+.rnmd-heading span{color:#777;font:10px "DM Mono",monospace}
+.rnmd-list{display:flex;flex-direction:column;gap:8px}
+.rnmd-list-row{display:flex;align-items:center;gap:13px;padding:14px;border:1px solid #2e2e2e;border-radius:9px;color:#bbb}
+.rnmd-list-row>div{display:flex;flex-direction:column;gap:5px;min-width:0}
+.rnmd-list-row b{color:#f3f3f3;font-size:12px}
+.rnmd-list-row small{font-size:10px;color:#888}
+.rnmd-actions{display:flex;margin-top:30px}
+@media(max-width:1050px){.sidebar{width:76px;flex-basis:76px}.sidebar.expanded{width:224px;flex-basis:224px}}
+@media(max-width:760px){.rnmd-info-grid{grid-template-columns:1fr}.rnmd-panel{padding:17px}.topbar{padding:0 18px}}
+@media(prefers-reduced-motion:reduce){.sidebar{transition:none}.page{scroll-behavior:auto}}
