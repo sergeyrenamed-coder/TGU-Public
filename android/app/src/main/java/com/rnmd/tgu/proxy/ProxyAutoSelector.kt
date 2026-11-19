@@ -156,21 +156,19 @@ class ProxyAutoSelector(
             ProxyAutoSelectionRuntime.candidateStarted(entry.endpoint)
             var successful = 0
             val timings = mutableListOf<Long>()
-            repeat(FAST_VERIFY_ATTEMPTS) {
+            for (attempt in 0 until FAST_VERIFY_ATTEMPTS) {
                 val result = try {
                     withContext(Dispatchers.IO) {
-                        probe(profile, VERIFY_CONNECT_TIMEOUT_MS, VERIFY_READ_TIMEOUT_MS)
+                        probe(profile, FAST_CONNECT_TIMEOUT_MS, FAST_READ_TIMEOUT_MS)
                     }
                 } catch (cancelled: CancellationException) {
                     throw cancelled
                 } catch (_: Exception) {
                     null
                 }
-                if (result?.success == true) {
-                    successful++
-                    timings += result.elapsedMs
-                }
-                if (successful >= 2) return@repeat
+                if (result?.success != true) break
+                successful++
+                timings += result.elapsedMs
             }
             ProxyAutoSelectionRuntime.candidateFinished(successful >= 2, null, null)
             if (successful >= 2) {
@@ -382,8 +380,10 @@ class ProxyAutoSelector(
         ((System.nanoTime() - startedAtNanos) / 1_000_000L).coerceAtLeast(0L)
 
     private companion object {
-        const val FAST_RU_CANDIDATES = 12
+        const val FAST_RU_CANDIDATES = 8
         const val FAST_VERIFY_ATTEMPTS = 2
+        const val FAST_CONNECT_TIMEOUT_MS = 2_500
+        const val FAST_READ_TIMEOUT_MS = 3_000
         const val MAX_PARALLEL = 24
         const val FINALISTS_COUNT = 5
         const val VERIFY_REPEATS = 2

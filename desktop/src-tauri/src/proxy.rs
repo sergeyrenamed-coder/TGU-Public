@@ -1071,6 +1071,8 @@ pub async fn engine_auto_select(
     let ru = crate::ru_health::cached(&app);
     records.sort_by(|left, right| {
         ru.contains_key(&right.id).cmp(&ru.contains_key(&left.id))
+            .then_with(|| ru.get(&left.id).copied().unwrap_or(u64::MAX)
+                .cmp(&ru.get(&right.id).copied().unwrap_or(u64::MAX)))
             .then_with(|| right.source_tier.as_deref().unwrap_or("").cmp(left.source_tier.as_deref().unwrap_or("")))
             .then_with(|| right.uptime.unwrap_or(0.0).total_cmp(&left.uptime.unwrap_or(0.0)))
             .then_with(|| left.rtt_ms.unwrap_or(u64::MAX).cmp(&right.rtt_ms.unwrap_or(u64::MAX)))
@@ -1112,7 +1114,7 @@ pub async fn engine_auto_select(
     // backup pool in the background without touching the active upstream.
     let fast_candidates: Vec<_> = records.iter()
         .filter(|r| ru.contains_key(&r.id))
-        .take(12).cloned().collect();
+        .take(8).cloned().collect();
     for candidate in fast_candidates {
         let mut timings = Vec::new();
         let endpoint = auto_endpoint(&candidate);
