@@ -29,6 +29,7 @@ class ProxyAutoMonitor(
             val warmPool = WarmStandbyPool()
             var warmJob: Job? = null
             var warmForId: String? = null
+            var lastWarmScanAt = 0L
             val profileStore = ProxyProfileStore(appContext)
             val upstreamStore = UpstreamProxySettingsStore(appContext)
             var lastCatalogRefreshAt = 0L
@@ -45,6 +46,9 @@ class ProxyAutoMonitor(
                 failedProfileUntil.entries.removeAll { it.value <= now }
 
                 if (!settings.enabled) {
+                    warmJob?.cancel()
+                    warmJob = null
+                    warmForId = null
                     val current = runCatching { upstreamStore.selectedProfile() }.getOrNull()
                     ProxyMonitorRuntime.publish(
                         ProxyMonitorSnapshot(
@@ -113,6 +117,7 @@ class ProxyAutoMonitor(
                             switchCount++
                             warmJob?.cancel()
                             warmForId = profile.id
+                            lastWarmScanAt = System.currentTimeMillis()
                             warmJob = launch {
                                 repository.cached()?.let { warmPool.scan(it.entries, profile.id) }
                             }
@@ -149,9 +154,12 @@ class ProxyAutoMonitor(
                         )
                     }
                 } else {
-                    if (warmForId != current.id) {
+                    if (warmForId != current.id ||
+                        (warmJob?.isCompleted == true && warmPool.size() < 3 &&
+                            now - lastWarmScanAt >= 5 * 60_000L)) {
                         warmJob?.cancel()
                         warmForId = current.id
+                        lastWarmScanAt = now
                         warmJob = launch {
                             repository.cached()?.let { warmPool.scan(it.entries, current.id) }
                         }

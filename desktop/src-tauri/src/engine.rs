@@ -990,6 +990,7 @@ async fn monitor_selected_upstream(
                     let optimize_interval_ms = AUTO_OPTIMIZE_INTERVAL.as_millis() as u64;
                     if settings.auto_optimize_connection
                         && auto_managed
+                        && !crate::warm_standby::is_fast_pinned(&active.id)
                         && now.saturating_sub(last_optimization_at) >= optimize_interval_ms
                     {
                         last_optimization_at = now;

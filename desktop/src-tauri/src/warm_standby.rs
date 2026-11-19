@@ -19,6 +19,20 @@ struct Warm {
 }
 static CACHE: OnceLock<Mutex<Vec<Warm>>> = OnceLock::new();
 static SCANNING: AtomicBool = AtomicBool::new(false);
+static PINNED_ID: OnceLock<Mutex<Option<String>>> = OnceLock::new();
+
+fn pinned() -> &'static Mutex<Option<String>> {
+    PINNED_ID.get_or_init(|| Mutex::new(None))
+}
+
+/// A Fast Connect route must not be replaced merely because a faster backup
+/// appears; only health-check failure should switch the active upstream.
+pub(crate) fn is_fast_pinned(active_id: &str) -> bool {
+    pinned().lock().ok()
+        .and_then(|p| p.clone())
+        .as_deref() == Some(active_id)
+}
+
 
 fn cache() -> &'static Mutex<Vec<Warm>> {
     CACHE.get_or_init(|| Mutex::new(Vec::new()))
@@ -33,6 +47,8 @@ impl Drop for ScanGuard {
 }
 
 pub(crate) fn start_scan(mut records: Vec<CatalogRecord>, active_id: String, ru_ids: HashSet<String>) {
+    // Set the active Fast Connect route even when a previous scan is in progress.
+    if let Ok(mut p) = pinned().lock() { *p = Some(active_id.clone()); }
     if SCANNING.compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire).is_err() {
         return;
     }
