@@ -27,6 +27,8 @@ data class FreedomCheckerProxy(
     val communityUniqueReporters: Int = 0,
     val communitySuccessRate: Double? = null,
     val communityMedianRttMs: Long? = null,
+    val ruVerified: Boolean = false,
+    val ruLatencyMs: Long? = null,
 )
 
 data class FreedomCheckerSnapshot(
@@ -45,10 +47,10 @@ class FreedomCheckerCatalogRepository(context: Context) {
         return runCatching { parse(raw, fetchedAt) }.getOrNull()
     }
 
-       
-                                                                                 
-                                                                                
-       
+    /**
+     * Fetches the public machine-readable snapshot. Redirects to unrelated hosts
+     * are rejected deliberately; a failed refresh never deletes the last cache.
+     */
     @Synchronized
     fun refresh(): FreedomCheckerSnapshot {
         val failures = mutableListOf<String>()
@@ -76,6 +78,8 @@ class FreedomCheckerCatalogRepository(context: Context) {
                     val raw = response.body?.string()?.takeIf { it.isNotBlank() }
                         ?: throw IOException("Catalog returned an empty response.")
                     val now = System.currentTimeMillis()
+                    // A failed optional RU request cannot block the primary catalog.
+                    fetchRuFeed(now)
                     val snapshot = parse(raw, now)
                     if (snapshot.entries.isEmpty()) {
                         throw IOException(
@@ -101,6 +105,22 @@ class FreedomCheckerCatalogRepository(context: Context) {
         throw IOException("All proxy catalog sources failed. " + failures.joinToString("; "))
     }
 
+    private fun fetchRuFeed(now: Long) {
+        runCatching {
+            val request = Request.Builder().url(RuCloudHealth.FEED_URL)
+                .header("Accept", "application/json")
+                .header("Cache-Control", "no-cache")
+                .get().build()
+            RU_CLIENT.newCall(request).execute().use { response ->
+                if (!response.isSuccessful || response.request.url.host != "raw.githubusercontent.com") return@use
+                val raw = response.body?.string() ?: return@use
+                if (RuCloudHealth.isFreshFeed(raw, now)) {
+                    prefs.edit().putString(KEY_RU_JSON, raw).apply()
+                }
+            }
+        }
+    }
+
     private fun parse(raw: String, fetchedAt: Long): FreedomCheckerSnapshot {
         val root: Any = when (raw.trimStart().firstOrNull()) {
             '[' -> JSONArray(raw)
@@ -114,9 +134,16 @@ class FreedomCheckerCatalogRepository(context: Context) {
             firstValue(root, "generated_at", "generatedAt", "updated_at", "updatedAt", "created_at")
         } else null
 
+        val ruEvidence = RuCloudHealth.verified(prefs.getString(KEY_RU_JSON, null))
+        val enriched = records.values.map { entry ->
+            val hint = entry.directoryId?.let { ruEvidence[it] }
+            entry.copy(ruVerified = hint != null, ruLatencyMs = hint?.latencyMs)
+        }
         return FreedomCheckerSnapshot(
-            entries = records.values.toList().sortedWith(
+            entries = enriched.sortedWith(
                 compareBy<FreedomCheckerProxy> { !it.supported }
+                    .thenBy { !it.ruVerified }
+                    .thenBy { it.ruLatencyMs ?: Long.MAX_VALUE }
                     .thenByDescending { it.communityUniqueReporters >= 3 }
                     .thenByDescending { if (it.communityUniqueReporters >= 3) it.communitySuccessRate ?: -1.0 else -1.0 }
                     .thenBy { if (it.communityUniqueReporters >= 3) it.communityMedianRttMs ?: Long.MAX_VALUE else Long.MAX_VALUE }
@@ -147,7 +174,7 @@ class FreedomCheckerCatalogRepository(context: Context) {
     }
 
     private fun parseRecord(obj: JSONObject): FreedomCheckerProxy? {
-                                                                                      
+        // Never offer records disabled, stale, or explicitly failed by the directory.
         if (obj.has("enabled") && !obj.optBoolean("enabled", true)) return null
         if (obj.optBoolean("stale", false)) return null
         val probeStatus = firstValue(obj, "probe_status", "probeStatus")
@@ -362,6 +389,14 @@ class FreedomCheckerCatalogRepository(context: Context) {
         private const val PREFS = "tgu_freedom_checker_catalog"
         private const val KEY_JSON = "snapshot_json"
         private const val KEY_FETCHED_AT = "snapshot_fetched_at"
+        private const val KEY_RU_JSON = "ru_cloud_health_json"
+        private val RU_CLIENT = OkHttpClient.Builder()
+            .connectTimeout(4, TimeUnit.SECONDS)
+            .readTimeout(5, TimeUnit.SECONDS)
+            .callTimeout(7, TimeUnit.SECONDS)
+            .followRedirects(false)
+            .followSslRedirects(false)
+            .build()
         private val CLIENT = OkHttpClient.Builder()
             .connectTimeout(12, TimeUnit.SECONDS)
             .readTimeout(20, TimeUnit.SECONDS)

@@ -18,7 +18,7 @@ concurrency:
 
 jobs:
   android:
-    name: Build Android 0.9.6
+    name: Build Android 0.9.8
     runs-on: ubuntu-latest
     timeout-minutes: 45
     defaults:
@@ -65,6 +65,12 @@ jobs:
           echo "TGU_DEBUG_KEYSTORE_PASSWORD=$TGU_DEBUG_KEYSTORE_PASSWORD" >> "$GITHUB_ENV"
           # Do not print the keystore, password, or any private key material.
 
+      - name: Check release metadata
+        shell: bash
+        run: |
+          grep -q 'versionCode = 27' app/build.gradle.kts
+          grep -q 'versionName = "0.9.8"' app/build.gradle.kts
+
       - name: Build APK and run unit tests
         run: gradle --no-daemon --stacktrace :app:assembleDebug :app:testDebugUnitTest
 
@@ -83,18 +89,18 @@ jobs:
         shell: bash
         run: |
           mkdir -p "$RUNNER_TEMP/release"
-          cp app/build/outputs/apk/debug/app-debug.apk "$RUNNER_TEMP/release/TGU-Android-v0.9.6-debug.apk"
+          cp app/build/outputs/apk/debug/app-debug.apk "$RUNNER_TEMP/release/TGU-Android-v0.9.8-debug.apk"
 
       - name: Upload Android release asset
         uses: actions/upload-artifact@v4
         with:
           name: release-android
-          path: ${{ runner.temp }}/release/TGU-Android-v0.9.6-debug.apk
+          path: ${{ runner.temp }}/release/TGU-Android-v0.9.8-debug.apk
           if-no-files-found: error
           retention-days: 3
 
   windows:
-    name: Build Windows 0.3.1
+    name: Build Windows 0.4.3
     runs-on: windows-latest
     timeout-minutes: 60
     defaults:
@@ -138,6 +144,13 @@ jobs:
       - name: Run Rust unit tests
         run: cargo test --manifest-path src-tauri/Cargo.toml
 
+      - name: Check release metadata
+        shell: pwsh
+        run: |
+          $cfg = Get-Content src-tauri/tauri.conf.json -Raw | ConvertFrom-Json
+          $pkg = Get-Content package.json -Raw | ConvertFrom-Json
+          if ($cfg.version -ne "0.4.3" -or $pkg.version -ne "0.4.3") { throw "TGU Desktop version mismatch" }
+
       - name: Build portable executable
         env:
           TGU_COMMUNITY_API_BASE_URL: ${{ vars.TGU_COMMUNITY_API_BASE_URL }}
@@ -147,13 +160,13 @@ jobs:
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force -Path "$env:RUNNER_TEMP/release" | Out-Null
-          Copy-Item "src-tauri/target/release/tgu-desktop.exe" "$env:RUNNER_TEMP/release/TGU-Desktop-v0.3.1-portable.exe"
+          Copy-Item "src-tauri/target/release/tgu-desktop.exe" "$env:RUNNER_TEMP/release/TGU-Desktop-v0.4.3-portable.exe"
 
       - name: Upload Windows release asset
         uses: actions/upload-artifact@v4
         with:
           name: release-windows
-          path: ${{ runner.temp }}/release/TGU-Desktop-v0.3.1-portable.exe
+          path: ${{ runner.temp }}/release/TGU-Desktop-v0.4.3-portable.exe
           if-no-files-found: error
           retention-days: 3
 
@@ -173,19 +186,31 @@ jobs:
       - name: Publish Android prerelease
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: android-v0.9.6
+          tag_name: android-v0.9.8
           target_commitish: ${{ github.sha }}
-          name: TGU Android 0.9.6
+          name: TGU Android 0.9.8 — Fast Connect
           prerelease: true
           make_latest: false
           body: |
-            Android public test build for TGU 0.9.6.
+            ## TGU Android 0.9.8 — Fast Connect и резервные прокси
 
-            Signed with the persistent project debug keystore to support in-place
-            updates on devices previously using that certificate. Existing
-            installations signed by a DIFFERENT certificate cannot be updated
-            without the original key and will require a one-time reinstall.
-          files: release-android/TGU-Android-v0.9.6-debug.apk
+            В этом обновлении TGU быстрее подключает Telegram и продолжает искать запасные прокси в фоне, пока основной уже используется.
+
+            ### Что нового
+            - **RU Verified** — приоритет серверов, проверенных российским узлом Yandex Cloud. Облачная отметка только подсказывает порядок: перед выбором TGU подтверждает доступность с телефона.
+            - **Fast Connect** — быстрая проверка лучших RU-кандидатов и подключение первого локально подтверждённого upstream, не дожидаясь окончания полного сканирования каталога.
+            - **Warm Standby** — фоновая проверка и временное хранение до пяти резервных серверов, пока Telegram уже работает.
+            - **Автовосстановление** — при недоступности основного прокси TGU сначала повторно проверяет резерв, а затем при необходимости запускает обычный автоподбор.
+            - **Каталог и диагностика** — RU-метки и сведения о проверке не заменяют результаты тестов в вашей сети.
+
+            ### Установка и важные сведения
+            - APK подписан постоянным тестовым сертификатом проекта для обновления поверх предыдущих совместимых сборок TGU; код версии **27**.
+            - Если уже установленный TGU подписан другим сертификатом, Android не разрешит обычное обновление. Перед переустановкой сохраните нужные настройки.
+            - TGU — локальный прокси для Telegram, **не системный VPN**. RU Verified не гарантирует доступность сервера на каждом операторе.
+            - Сборка предварительная: сообщайте о неполадках через GitHub Issues.
+
+            **RNMDTEAM · TGU Public**
+          files: release-android/TGU-Android-v0.9.8-debug.apk
 
   publish-windows:
     name: Publish Windows prerelease
@@ -203,13 +228,30 @@ jobs:
       - name: Publish Windows prerelease
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: windows-v0.3.1
+          tag_name: windows-v0.4.3
           target_commitish: ${{ github.sha }}
-          name: TGU Desktop 0.3.1
+          name: TGU Desktop 0.4.3 — работа в трее
           prerelease: true
           make_latest: false
           body: |
-            Windows portable public test build for TGU Desktop 0.3.1.
-            The executable remains portable and unsigned by a Windows code
-            signing certificate. Windows may warn about an unknown publisher.
-          files: release-windows/TGU-Desktop-v0.3.1-portable.exe
+            ## TGU Desktop 0.4.3 — новая версия для Windows
+
+            Крупное обновление TGU Desktop: быстрый запуск прокси, обновлённый интерфейс, RNMD ID и полноценная работа в системном трее.
+
+            ### Что нового
+            - **Fast Connect и RU Verified** — быстрый выбор upstream с обязательной проверкой на ПК; рабочий прокси подключается до завершения проверки остальных.
+            - **Warm Standby** — фоновая подготовка до пяти запасных прокси и перепроверка резерва при обрыве основного соединения.
+            - **Новый интерфейс** — минималистичный чёрно-белый дизайн, сворачиваемая боковая панель с иконками (свёрнута при запуске), исправлена прокрутка и обновлена фирменная верхняя полоса окна.
+            - **RNMD ID** — авторизация через Telegram в системном браузере, экран профиля, устройств и покупок; сессия хранится в зашифрованном виде (AES-256-GCM), ключ — в Windows Credential Manager.
+            - **Работа в трее** — кнопка × и Alt+F4 скрывают окно, но не останавливают прокси-движок. В трее есть «Открыть TGU» и «Полностью выйти». Последний пункт корректно завершает работу.
+            - **Улучшения стабильности** — версия отображается автоматически, сохранены настройки и параметры подключения.
+
+            ### Установка и важные сведения
+            - Скачайте **portable EXE** для Windows x64. Перед запуском новой сборки полностью завершите предыдущую версию TGU.
+            - EXE не имеет коммерческой цифровой подписи издателя — Windows может показать предупреждение о неизвестном разработчике.
+            - После закрытия окна кнопкой × TGU продолжает работать; для полного завершения используйте меню системного трея.
+            - Приложение работает с Telegram через локальный прокси, а не заменяет системный VPN.
+            - Релиз предварительный: сообщения об ошибках принимаются в GitHub Issues.
+
+            **RNMDTEAM · TGU Public**
+          files: release-windows/TGU-Desktop-v0.4.3-portable.exe

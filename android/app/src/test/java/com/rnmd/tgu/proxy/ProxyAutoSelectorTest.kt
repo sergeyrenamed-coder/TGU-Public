@@ -70,6 +70,54 @@ class ProxyAutoSelectorTest {
     }
 
     @Test
+    fun ruCandidateWinsOnlyWhenItPassedLocalChecksAndIsCompetitive() = runBlocking {
+        val result = ProxyAutoSelector(probe = { profile, _, _ ->
+            if (profile.id == "ru") success(105) else success(100)
+        }).findBest(listOf(candidate("global"), candidate("ru").copy(ruVerified = true, ruLatencyMs = 70)))
+        assertEquals("ru", result.selected?.profile?.id)
+        assertEquals(2, result.firstPassAvailable)
+    }
+
+    @Test
+    fun unreachableRuCandidateNeverBeatsLocallyWorkingGlobal() = runBlocking {
+        val result = ProxyAutoSelector(probe = { profile, _, _ ->
+            if (profile.id == "ru") failure() else success(100)
+        }).findBest(listOf(candidate("ru").copy(ruVerified = true, ruLatencyMs = 10), candidate("global")))
+        assertEquals("global", result.selected?.profile?.id)
+    }
+
+    @Test
+    fun fastConnectStopsAtFirstLocallyVerifiedRuProxy() = runBlocking {
+        val calls = ConcurrentHashMap<String, AtomicInteger>()
+        val candidates = listOf(
+            candidate("ru-1").copy(ruVerified = true, ruLatencyMs = 20),
+            candidate("ru-2").copy(ruVerified = true, ruLatencyMs = 30),
+            candidate("global"),
+        )
+        val selector = ProxyAutoSelector(probe = { profile, _, _ ->
+            calls.computeIfAbsent(profile.id) { AtomicInteger() }.incrementAndGet()
+            if (profile.id == "ru-1") success(40) else failure()
+        })
+        val result = selector.findFirstVerifiedRu(candidates)
+        assertEquals("ru-1", result?.selected?.profile?.id)
+        assertEquals(2, calls["ru-1"]?.get())
+        assertEquals(null, calls["global"]?.get())
+        assertEquals(null, calls["ru-2"]?.get())
+    }
+
+    @Test
+    fun fastConnectRequiresTwoSuccessfulLocalChecks() = runBlocking {
+        val calls = AtomicInteger()
+        val selector = ProxyAutoSelector(probe = { _, _, _ ->
+            if (calls.incrementAndGet() == 1) success(20) else failure()
+        })
+        val result = selector.findFirstVerifiedRu(
+            listOf(candidate("ru").copy(ruVerified = true, ruLatencyMs = 10))
+        )
+        assertNull(result)
+    }
+
+    @Test
     fun noSuccessfulProbeNeverSelectsAnUpstream() = runBlocking {
         var calls = 0
         val result = ProxyAutoSelector(probe = { _, _, _ ->

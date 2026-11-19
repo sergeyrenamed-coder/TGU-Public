@@ -103,6 +103,8 @@ pub struct ProxySummary {
     pub community_unique_reporters: u32,
     pub community_success_rate: Option<f64>,
     pub community_median_rtt_ms: Option<u64>,
+    pub ru_verified: bool,
+    pub ru_rtt_ms: Option<u64>,
 }
 
 #[derive(Debug, Serialize)]
@@ -594,7 +596,7 @@ fn is_public_ipv4(address: Ipv4Addr) -> bool {
         return false;
     }
 
-                                                                                       
+    // Exclude shared-address, protocol-assignment, benchmark and documentation ranges.
     if a == 0
         || a >= 224
         || (a == 100 && (64..=127).contains(&b))
@@ -613,7 +615,7 @@ pub(crate) fn is_public_ip(address: IpAddr) -> bool {
         IpAddr::V4(ip) => is_public_ipv4(ip),
         IpAddr::V6(ip) => {
             let segments = ip.segments();
-                                                                         
+            // IPv4-mapped IPv6 addresses must pass the same IPv4 checks.
             if segments[0..5] == [0, 0, 0, 0, 0] && segments[5] == 0xffff {
                 let v4 = Ipv4Addr::new(
                     (segments[6] >> 8) as u8,
@@ -703,19 +705,30 @@ fn summarize(record: &CatalogRecord) -> ProxySummary {
         community_unique_reporters: record.community_unique_reporters,
         community_success_rate: record.community_success_rate,
         community_median_rtt_ms: record.community_median_rtt_ms,
+        ru_verified: false,
+        ru_rtt_ms: None,
     }
 }
 
 fn response_from_document(
+    app: &AppHandle,
     document: CatalogDocument,
     from_cache: bool,
     warning: Option<String>,
 ) -> CatalogResponse {
+    let ru = crate::ru_health::cached(app);
     let proxies: Vec<_> = document
         .proxies
         .iter()
         .filter(|record| is_usable_record(record))
-        .map(summarize)
+        .map(|record| {
+            let mut result = summarize(record);
+            if let Some(ms) = ru.get(&record.id) {
+                result.ru_verified = true;
+                result.ru_rtt_ms = Some(*ms);
+            }
+            result
+        })
         .collect();
     CatalogResponse {
         count: proxies.len(),
@@ -739,6 +752,7 @@ fn load_cached_document(app: &AppHandle) -> Result<CatalogDocument, String> {
 pub async fn catalog_load(app: AppHandle) -> Result<CatalogResponse, String> {
     match load_cached_document(&app) {
         Ok(document) => Ok(response_from_document(
+            &app,
             document,
             true,
             Some("Показана последняя сохранённая копия. Обнови каталог для свежих данных.".into()),
@@ -792,7 +806,10 @@ pub async fn catalog_refresh(app: AppHandle) -> Result<CatalogResponse, String> 
         }.await;
 
         match attempt {
-            Ok(document) => return Ok(response_from_document(document, false, None)),
+            Ok(document) => {
+                crate::ru_health::refresh(&app).await;
+                return Ok(response_from_document(&app, document, false, None));
+            },
             Err(error) => failures.push(format!("{source}: {error}")),
         }
     }
@@ -800,6 +817,7 @@ pub async fn catalog_refresh(app: AppHandle) -> Result<CatalogResponse, String> 
     let error = failures.join("; ");
     match load_cached_document(&app) {
         Ok(document) => Ok(response_from_document(
+            &app,
             document,
             true,
             Some(format!("{error} Используется последний успешный кэш.")),
@@ -895,7 +913,7 @@ async fn finish_auto_candidate(
         let mut snapshot = progress.lock().await;
         snapshot.completed = snapshot.completed.saturating_add(1);
         if verification {
-                                                                                     
+            // Count a finalist once after its full repeat sequence, not every probe.
         } else if result.success {
             snapshot.available = snapshot.available.saturating_add(1);
             let is_better = snapshot.best_latency_ms
@@ -1050,8 +1068,12 @@ pub async fn engine_auto_select(
 ) -> Result<AutoSelectionResult, String> {
     let mut records = cached_records(&app)?;
     records.retain(|record| is_supported_record(record).0);
+    let ru = crate::ru_health::cached(&app);
     records.sort_by(|left, right| {
-        right.source_tier.as_deref().unwrap_or("").cmp(left.source_tier.as_deref().unwrap_or(""))
+        ru.contains_key(&right.id).cmp(&ru.contains_key(&left.id))
+            .then_with(|| ru.get(&left.id).copied().unwrap_or(u64::MAX)
+                .cmp(&ru.get(&right.id).copied().unwrap_or(u64::MAX)))
+            .then_with(|| right.source_tier.as_deref().unwrap_or("").cmp(left.source_tier.as_deref().unwrap_or("")))
             .then_with(|| right.uptime.unwrap_or(0.0).total_cmp(&left.uptime.unwrap_or(0.0)))
             .then_with(|| left.rtt_ms.unwrap_or(u64::MAX).cmp(&right.rtt_ms.unwrap_or(u64::MAX)))
     });
@@ -1087,8 +1109,64 @@ pub async fn engine_auto_select(
         });
     }
 
-                                                                          
-                                                                            
+    // Fast path: connect as soon as the first Russian-cloud candidate passes
+    // TWO independent Telegram DC checks on this computer. Then fill a warm
+    // backup pool in the background without touching the active upstream.
+    let fast_candidates: Vec<_> = records.iter()
+        .filter(|r| ru.contains_key(&r.id))
+        .take(8).cloned().collect();
+    for candidate in fast_candidates {
+        let mut timings = Vec::new();
+        let endpoint = auto_endpoint(&candidate);
+        start_auto_candidate(&app, &progress, &endpoint, false).await;
+        for _ in 0..2 {
+            let outcome = tokio::task::spawn_blocking({
+                let rec = candidate.clone();
+                move || run_proxy_test_with_timeouts(rec, VERIFY_CONNECT_TIMEOUT, VERIFY_IO_TIMEOUT)
+            }).await.map_err(|e| format!("Fast Connect check task: {e}"))?;
+            if !outcome.success { break; }
+            timings.push(outcome.elapsed_ms);
+        }
+        let ok = timings.len() == 2;
+        let probe_result = ProxyTestResult {
+            success: ok,
+            stage: "Fast Connect".into(),
+            detail: if ok { "Two local checks passed".into() } else { "Not reachable locally".into() },
+            elapsed_ms: timings.first().copied().unwrap_or_default(),
+        };
+        finish_auto_candidate(&app, &progress, &endpoint, &probe_result, false).await;
+        if ok {
+            let latency = timings.iter().copied().sum::<u64>() / timings.len() as u64;
+            let mut summary = summarize(&candidate);
+            summary.ru_verified = true;
+            summary.ru_rtt_ms = ru.get(&candidate.id).copied();
+            let saved = crate::profiles::save_catalog_profile(&app, &candidate)?;
+            state.select_upstream(saved.to_engine_upstream()).await?;
+            crate::profiles::set_selected_id(&app, Some(saved.id.clone()))?;
+            let count = progress.lock().await.completed;
+            let message = "Fast Connect: сервер RU Verified проверен локально; резервные узлы проверяются в фоне.".to_string();
+            set_auto_progress(&app, &progress, "Fast Connect — upstream готов", false, Some(message.clone())).await;
+            let _ = crate::profiles::history_append(
+                &app, &saved.endpoint(), &saved.protocol, "FAST_CONNECT",
+                true, latency, &message,
+            );
+            let ru_ids = ru.keys().cloned().collect();
+            crate::warm_standby::start_scan(records.clone(), candidate.id, ru_ids);
+            return Ok(AutoSelectionResult {
+                selected: Some(summary),
+                total_candidates,
+                tested_candidates: count,
+                first_pass_available: 1,
+                finalists_verified: 1,
+                verified_latency_ms: Some(latency),
+                message,
+                community_feedback: None,
+            });
+        }
+    }
+
+    // Like Android TGU, scan every supported catalogue candidate from the
+    // current device/network. The semaphore only limits active connections.
     let (available, community_reports) = match probe_all_catalog_candidates(app.clone(), records, progress.clone()).await {
         Ok(result) => result,
         Err(error) => {
@@ -1134,7 +1212,7 @@ pub async fn engine_auto_select(
     }
 
     let mut finalists = available;
-    finalists.sort_by_key(|(_, latency)| *latency);
+    finalists.sort_by_key(|(record, latency)| crate::ru_health::scored_local_latency(*latency, ru.contains_key(&record.id)));
     finalists.truncate(AUTO_FINALISTS);
 
     let verified = match verify_auto_finalists(app.clone(), finalists, progress.clone()).await {
@@ -1145,6 +1223,8 @@ pub async fn engine_auto_select(
         }
     };
     let verified_count = verified.len();
+    let mut verified = verified;
+    verified.sort_by_key(|(record, latency)| crate::ru_health::scored_local_latency(*latency, ru.contains_key(&record.id)));
     selected = verified.into_iter().next();
 
     let Some((record, latency)) = selected else {
@@ -1166,7 +1246,11 @@ pub async fn engine_auto_select(
         });
     };
 
-    let summary = summarize(&record);
+    let mut summary = summarize(&record);
+    if let Some(ms) = ru.get(&record.id) {
+        summary.ru_verified = true;
+        summary.ru_rtt_ms = Some(*ms);
+    }
     let saved = crate::profiles::save_catalog_profile(&app, &record)?;
     state.select_upstream(saved.to_engine_upstream()).await?;
     crate::profiles::set_selected_id(&app, Some(saved.id.clone()))?;
@@ -1188,6 +1272,11 @@ pub async fn engine_auto_select(
         &message,
     );
 
+    crate::warm_standby::start_scan(
+        cached_records(&app).unwrap_or_default(),
+        record.id.clone(),
+        ru.keys().cloned().collect(),
+    );
     Ok(AutoSelectionResult {
         selected: Some(summary),
         total_candidates,
@@ -1311,9 +1400,9 @@ fn generate_relay_crypto(secret: Option<&[u8]>, padded: bool) -> RelayCrypto {
         let reversed: Vec<u8> = init[8..56].iter().rev().copied().collect();
         let inbound_key = sha256_key(&reversed[0..32], secret);
         let inbound_iv: [u8; 16] = reversed[32..48].try_into().expect("fixed IV range");
-                                                                             
-                                                                            
-                                                                           
+        // The remote server does not send a second obfuscated2 header before
+        // the MTProto stream. Its first response byte uses CTR offset zero.
+        // Android's MtProtoCrypto.generateRelayInit follows the same rule.
         let decryptor = make_cipher(inbound_key, inbound_iv);
 
         return RelayCrypto {

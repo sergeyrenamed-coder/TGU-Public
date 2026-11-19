@@ -127,17 +127,63 @@ private data class VerifiedCandidate(
     val successfulChecks: Int,
 )
 
-   
-                                                                                 
-                                                                              
-                                                                               
-   
+/**
+ * Tests every supported catalog entry from the Android device's current network.
+ * A first sweep checks the real Telegram transport; the fastest five are then
+ * re-tested twice so one lucky response does not decide the selected upstream.
+ */
 class ProxyAutoSelector(
     private val probe: (ProxyProfile, Int, Int) -> ProxyTestResult = { profile, connectTimeoutMs, readTimeoutMs ->
         ProxyDiagnostics.check(profile, connectTimeoutMs, readTimeoutMs)
     },
     private val onScanCompleted: (String, List<CommunityProxyProbeReport>) -> Unit = { _, _ -> },
 ) {
+
+    /**
+     * Fast Connect: never wait for the full catalog when a locally working
+     * Yandex-RU candidate is available. A cloud flag is only a search order hint.
+     * Two independent, successful device-side Telegram handshakes are required.
+     */
+    suspend fun findFirstVerifiedRu(entries: List<FreedomCheckerProxy>): ProxyAutoSelectionResult? {
+        val startedAt = System.nanoTime()
+        val ruCandidates = entries.filter {
+            it.ruVerified && it.supported && !it.stale && it.profile != null
+        }.sortedBy { it.ruLatencyMs ?: Long.MAX_VALUE }.take(FAST_RU_CANDIDATES)
+        if (ruCandidates.isEmpty()) return null
+        ProxyAutoSelectionRuntime.begin(ruCandidates.size)
+        for (entry in ruCandidates) {
+            val profile = entry.profile ?: continue
+            ProxyAutoSelectionRuntime.candidateStarted(entry.endpoint)
+            var successful = 0
+            val timings = mutableListOf<Long>()
+            for (attempt in 0 until FAST_VERIFY_ATTEMPTS) {
+                val result = try {
+                    withContext(Dispatchers.IO) {
+                        probe(profile, FAST_CONNECT_TIMEOUT_MS, FAST_READ_TIMEOUT_MS)
+                    }
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
+                } catch (_: Exception) {
+                    null
+                }
+                if (result?.success != true) break
+                successful++
+                timings += result.elapsedMs
+            }
+            ProxyAutoSelectionRuntime.candidateFinished(successful >= 2, null, null)
+            if (successful >= 2) {
+                val latency = median(timings)
+                val message = "Fast Connect: RU Verified подтверждён на устройстве; резервные серверы проверяются отдельно."
+                ProxyAutoSelectionRuntime.complete(entry.endpoint, latency, message)
+                return ProxyAutoSelectionResult(
+                    entry, ruCandidates.size, 1, latency, elapsed(startedAt), message
+                )
+            }
+        }
+        ProxyAutoSelectionRuntime.complete(null, null, "Быстрые RU-прокси недоступны в этой сети; запускаю общий поиск.")
+        return null
+    }
+
     suspend fun findBest(entries: List<FreedomCheckerProxy>): ProxyAutoSelectionResult {
         val startedAt = System.nanoTime()
         val scanId = UUID.randomUUID().toString()
@@ -145,7 +191,9 @@ class ProxyAutoSelector(
         val candidates = entries
             .filter { it.supported && it.profile != null && !it.stale }
             .sortedWith(
-                compareByDescending<FreedomCheckerProxy> { it.serverVerified }
+                compareByDescending<FreedomCheckerProxy> { it.ruVerified }
+                    .thenBy { it.ruLatencyMs ?: Long.MAX_VALUE }
+                    .thenByDescending { it.serverVerified }
                     .thenBy { it.serverRttMs ?: Long.MAX_VALUE }
             )
         if (candidates.isEmpty()) {
@@ -218,14 +266,19 @@ class ProxyAutoSelector(
                 }.awaitAll()
             }
 
-                                                                                    
-                                                                                    
+            // Send the completed first-pass results without waiting for the server.
+            // Only entries with an original directory ID are eligible for feedback.
             val completedReports = communityReports.toList()
             if (completedReports.isNotEmpty()) {
                 runCatching { onScanCompleted(scanId, completedReports) }
             }
 
-            val firstPass = successes.sortedBy { it.result.elapsedMs }
+            // RU-cloud verification is a 10% tiebreaker for locally competitive
+            // candidates, not proof that the user's network can connect.
+            val firstPass = successes.sortedWith(
+                compareBy<CandidateProbe> { localScore(it.result.elapsedMs, it.entry.ruVerified) }
+                    .thenBy { it.result.elapsedMs }
+            )
             if (firstPass.isEmpty()) {
                 val message = "Доступных прокси не найдено. Проверь интернет или попробуй другую сеть."
                 ProxyAutoSelectionRuntime.complete(null, null, message)
@@ -265,7 +318,7 @@ class ProxyAutoSelector(
             }
 
             val winner = verified.minWithOrNull(
-                compareBy<VerifiedCandidate> { it.medianLatencyMs }
+                compareBy<VerifiedCandidate> { localScore(it.medianLatencyMs, it.entry.ruVerified) }
                     .thenByDescending { it.successfulChecks }
             )
             val elapsedMs = elapsed(startedAt)
@@ -301,6 +354,9 @@ class ProxyAutoSelector(
         }
     }
 
+    private fun localScore(latencyMs: Long, ruVerified: Boolean): Double =
+        if (ruVerified) latencyMs.toDouble() * 0.9 else latencyMs.toDouble()
+
     private fun communityFailureCode(result: ProxyTestResult): String {
         if (result.success) return "none"
         val detail = (result.detail + " " + result.title).lowercase()
@@ -324,6 +380,10 @@ class ProxyAutoSelector(
         ((System.nanoTime() - startedAtNanos) / 1_000_000L).coerceAtLeast(0L)
 
     private companion object {
+        const val FAST_RU_CANDIDATES = 8
+        const val FAST_VERIFY_ATTEMPTS = 2
+        const val FAST_CONNECT_TIMEOUT_MS = 2_500
+        const val FAST_READ_TIMEOUT_MS = 3_000
         const val MAX_PARALLEL = 24
         const val FINALISTS_COUNT = 5
         const val VERIFY_REPEATS = 2
