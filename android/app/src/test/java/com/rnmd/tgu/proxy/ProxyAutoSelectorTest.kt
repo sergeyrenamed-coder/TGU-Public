@@ -70,6 +70,23 @@ class ProxyAutoSelectorTest {
     }
 
     @Test
+    fun ruCandidateWinsOnlyWhenItPassedLocalChecksAndIsCompetitive() = runBlocking {
+        val result = ProxyAutoSelector(probe = { profile, _, _ ->
+            if (profile.id == "ru") success(105) else success(100)
+        }).findBest(listOf(candidate("global"), candidate("ru").copy(ruVerified = true, ruLatencyMs = 70)))
+        assertEquals("ru", result.selected?.profile?.id)
+        assertEquals(2, result.firstPassAvailable)
+    }
+
+    @Test
+    fun unreachableRuCandidateNeverBeatsLocallyWorkingGlobal() = runBlocking {
+        val result = ProxyAutoSelector(probe = { profile, _, _ ->
+            if (profile.id == "ru") failure() else success(100)
+        }).findBest(listOf(candidate("ru").copy(ruVerified = true, ruLatencyMs = 10), candidate("global")))
+        assertEquals("global", result.selected?.profile?.id)
+    }
+
+    @Test
     fun noSuccessfulProbeNeverSelectsAnUpstream() = runBlocking {
         var calls = 0
         val result = ProxyAutoSelector(probe = { _, _, _ ->

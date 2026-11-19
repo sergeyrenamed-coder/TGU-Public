@@ -127,11 +127,11 @@ private data class VerifiedCandidate(
     val successfulChecks: Int,
 )
 
-   
-                                                                                 
-                                                                              
-                                                                               
-   
+/**
+ * Tests every supported catalog entry from the Android device's current network.
+ * A first sweep checks the real Telegram transport; the fastest five are then
+ * re-tested twice so one lucky response does not decide the selected upstream.
+ */
 class ProxyAutoSelector(
     private val probe: (ProxyProfile, Int, Int) -> ProxyTestResult = { profile, connectTimeoutMs, readTimeoutMs ->
         ProxyDiagnostics.check(profile, connectTimeoutMs, readTimeoutMs)
@@ -145,7 +145,9 @@ class ProxyAutoSelector(
         val candidates = entries
             .filter { it.supported && it.profile != null && !it.stale }
             .sortedWith(
-                compareByDescending<FreedomCheckerProxy> { it.serverVerified }
+                compareByDescending<FreedomCheckerProxy> { it.ruVerified }
+                    .thenBy { it.ruLatencyMs ?: Long.MAX_VALUE }
+                    .thenByDescending { it.serverVerified }
                     .thenBy { it.serverRttMs ?: Long.MAX_VALUE }
             )
         if (candidates.isEmpty()) {
@@ -218,14 +220,19 @@ class ProxyAutoSelector(
                 }.awaitAll()
             }
 
-                                                                                    
-                                                                                    
+            // Send the completed first-pass results without waiting for the server.
+            // Only entries with an original directory ID are eligible for feedback.
             val completedReports = communityReports.toList()
             if (completedReports.isNotEmpty()) {
                 runCatching { onScanCompleted(scanId, completedReports) }
             }
 
-            val firstPass = successes.sortedBy { it.result.elapsedMs }
+            // RU-cloud verification is a 10% tiebreaker for locally competitive
+            // candidates, not proof that the user's network can connect.
+            val firstPass = successes.sortedWith(
+                compareBy<CandidateProbe> { localScore(it.result.elapsedMs, it.entry.ruVerified) }
+                    .thenBy { it.result.elapsedMs }
+            )
             if (firstPass.isEmpty()) {
                 val message = "Доступных прокси не найдено. Проверь интернет или попробуй другую сеть."
                 ProxyAutoSelectionRuntime.complete(null, null, message)
@@ -265,7 +272,7 @@ class ProxyAutoSelector(
             }
 
             val winner = verified.minWithOrNull(
-                compareBy<VerifiedCandidate> { it.medianLatencyMs }
+                compareBy<VerifiedCandidate> { localScore(it.medianLatencyMs, it.entry.ruVerified) }
                     .thenByDescending { it.successfulChecks }
             )
             val elapsedMs = elapsed(startedAt)
@@ -300,6 +307,9 @@ class ProxyAutoSelector(
             throw error
         }
     }
+
+    private fun localScore(latencyMs: Long, ruVerified: Boolean): Double =
+        if (ruVerified) latencyMs.toDouble() * 0.9 else latencyMs.toDouble()
 
     private fun communityFailureCode(result: ProxyTestResult): String {
         if (result.success) return "none"

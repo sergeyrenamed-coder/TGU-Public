@@ -817,8 +817,8 @@ async fn handle_client(
 
     metrics.active_connections.fetch_sub(1, Ordering::Relaxed);
     if let Err(error) = result {
-                                                                             
-                                                                       
+        // A disconnected Telegram session is normal; expose only the current
+        // actionable failure and never log secrets or full proxy URLs.
         metrics.failed_connections.fetch_add(1, Ordering::Relaxed);
         metrics.set_error(error);
     }
@@ -871,8 +871,10 @@ async fn find_failover_candidate(
         !excluded_ids.contains(&record.id) &&
             crate::proxy::is_supported_profile_record(record)
     });
+    let ru = crate::ru_health::cached(app);
     records.sort_by(|left, right| {
-        right.source_tier.as_deref().unwrap_or("").cmp(left.source_tier.as_deref().unwrap_or(""))
+        ru.contains_key(&right.id).cmp(&ru.contains_key(&left.id))
+            .then_with(|| right.source_tier.as_deref().unwrap_or("").cmp(left.source_tier.as_deref().unwrap_or("")))
             .then_with(|| right.uptime.unwrap_or(0.0).total_cmp(&left.uptime.unwrap_or(0.0)))
             .then_with(|| left.rtt_ms.unwrap_or(u64::MAX).cmp(&right.rtt_ms.unwrap_or(u64::MAX)))
     });
@@ -897,7 +899,7 @@ async fn find_failover_candidate(
             available.push(candidate);
         }
     }
-    available.sort_by_key(|(_, latency)| *latency);
+    available.sort_by_key(|(record, latency)| crate::ru_health::scored_local_latency(*latency, ru.contains_key(&record.id)));
     available.truncate(FAILOVER_FINALISTS);
 
     let mut verified = Vec::new();
@@ -921,7 +923,7 @@ async fn find_failover_candidate(
         }
     }
 
-    verified.sort_by_key(|(_, latency)| *latency);
+    verified.sort_by_key(|(record, latency)| crate::ru_health::scored_local_latency(*latency, ru.contains_key(&record.id)));
     Ok(verified.into_iter().next())
 }
 
@@ -974,8 +976,8 @@ async fn monitor_selected_upstream(
                     metrics.failure_streak.store(0, Ordering::Relaxed);
                     metrics.set_route(&format!("{} · upstream rechecked", active.label()));
 
-                                                                                   
-                                                                                
+                    // Only auto-managed catalogue profiles participate in periodic
+                    // optimization. Manually named profiles are never replaced.
                     let auto_managed = crate::profiles::selected_profile(&app)
                         .ok()
                         .flatten()
@@ -1105,8 +1107,8 @@ async fn connect_upstream(
     cf_domains: Arc<RwLock<Vec<String>>>,
     settings: &crate::settings::DesktopSettings,
 ) -> Result<(ConnectedUpstream, String), String> {
-                                                                            
-                                                                 
+    // A user-selected proxy is exclusive: do not silently route its session
+    // directly if the selected external upstream is unavailable.
     if let Some(profile) = selected {
         if profile.is_socks5() {
             let target = dc_ip(dc).ok_or_else(|| format!("No Telegram DC{dc} address is configured."))?;
@@ -1551,8 +1553,8 @@ fn decode_cf_domain(encoded: &str) -> Option<String> {
         if prefix.is_empty() || !prefix.chars().all(|c| c.is_ascii_lowercase()) {
             return None;
         }
-                                                                      
-                                                     
+        // Match the Android decoder: shift by the count of alphabetic
+        // characters before the encoded .com suffix.
         let shift = prefix.chars().filter(|c| c.is_ascii_alphabetic()).count() as i32;
         let decoded: String = prefix.chars().map(|character| {
             let index = character as i32 - 'a' as i32;
