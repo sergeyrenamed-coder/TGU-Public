@@ -17,8 +17,8 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/sergeyrenamed-coder/TGU-Public/releases/tag/android-v0.9.4"><img src="https://img.shields.io/badge/ANDROID-0.9.4-ffffff?style=for-the-badge&labelColor=111111" alt="Android 0.9.4"></a>
-  <a href="https://github.com/sergeyrenamed-coder/TGU-Public/releases/tag/windows-v0.3.0"><img src="https://img.shields.io/badge/WINDOWS-0.3.0-ffffff?style=for-the-badge&labelColor=111111" alt="Windows 0.3.0"></a>
+  <a href="https://github.com/sergeyrenamed-coder/TGU-Public/releases/tag/android-v0.9.8"><img src="https://img.shields.io/badge/ANDROID-0.9.8-ffffff?style=for-the-badge&labelColor=111111" alt="Android 0.9.8"></a>
+  <a href="https://github.com/sergeyrenamed-coder/TGU-Public/releases/tag/windows-v0.4.3"><img src="https://img.shields.io/badge/WINDOWS-0.4.3-ffffff?style=for-the-badge&labelColor=111111" alt="Windows 0.4.3"></a>
   <a href="https://github.com/sergeyrenamed-coder/TGU-Public/actions/workflows/build-android.yml"><img src="https://img.shields.io/github/actions/workflow/status/sergeyrenamed-coder/TGU-Public/build-android.yml?branch=main&style=for-the-badge&label=ANDROID%20CI&labelColor=111111&color=ffffff" alt="Android CI"></a>
   <a href="https://github.com/sergeyrenamed-coder/TGU-Public/actions/workflows/build-desktop.yml"><img src="https://img.shields.io/github/actions/workflow/status/sergeyrenamed-coder/TGU-Public/build-desktop.yml?branch=main&style=for-the-badge&label=WINDOWS%20CI&labelColor=111111&color=ffffff" alt="Windows CI"></a>
 </p>
@@ -44,15 +44,15 @@ TGU поднимает локальный MTProto-узел, к которому 
 ## Скачать
 
 <p align="center">
-  <a href="https://github.com/sergeyrenamed-coder/TGU-Public/releases/download/android-v0.9.4/TGU-Android-v0.9.4-debug.apk"><img src="https://img.shields.io/badge/Скачать%20APK-ANDROID-ffffff?style=for-the-badge&labelColor=111111" alt="Скачать APK"></a>
+  <a href="https://github.com/sergeyrenamed-coder/TGU-Public/releases/download/android-v0.9.8/TGU-Android-v0.9.8-debug.apk"><img src="https://img.shields.io/badge/Скачать%20APK-ANDROID-ffffff?style=for-the-badge&labelColor=111111" alt="Скачать APK"></a>
   &nbsp;
-  <a href="https://github.com/sergeyrenamed-coder/TGU-Public/releases/download/windows-v0.3.0/TGU-Desktop-v0.3.0-portable.exe"><img src="https://img.shields.io/badge/Скачать%20EXE-WINDOWS-ffffff?style=for-the-badge&labelColor=111111" alt="Скачать EXE"></a>
+  <a href="https://github.com/sergeyrenamed-coder/TGU-Public/releases/download/windows-v0.4.3/TGU-Desktop-v0.4.3-portable.exe"><img src="https://img.shields.io/badge/Скачать%20EXE-WINDOWS-ffffff?style=for-the-badge&labelColor=111111" alt="Скачать EXE"></a>
 </p>
 
 | Платформа | Версия | Файл | Статус |
 |---|---:|---|---|
-| Android | 0.9.4 | [TGU-Android-v0.9.4-debug.apk](https://github.com/sergeyrenamed-coder/TGU-Public/releases/download/android-v0.9.4/TGU-Android-v0.9.4-debug.apk) | Предварительная сборка |
-| Windows | 0.3.0 | [TGU-Desktop-v0.3.0-portable.exe](https://github.com/sergeyrenamed-coder/TGU-Public/releases/download/windows-v0.3.0/TGU-Desktop-v0.3.0-portable.exe) | Предварительная сборка |
+| Android | 0.9.8 | [TGU-Android-v0.9.8-debug.apk](https://github.com/sergeyrenamed-coder/TGU-Public/releases/download/android-v0.9.8/TGU-Android-v0.9.8-debug.apk) | Предварительная сборка |
+| Windows | 0.4.3 | [TGU-Desktop-v0.4.3-portable.exe](https://github.com/sergeyrenamed-coder/TGU-Public/releases/download/windows-v0.4.3/TGU-Desktop-v0.4.3-portable.exe) | Предварительная сборка |
 
 **Перед установкой:**
 - Android APK подписан debug-ключом и предназначен для тестирования. Если подпись установленной версии отличается, Android может потребовать удалить старую версию перед установкой новой.

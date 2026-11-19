@@ -94,6 +94,8 @@ pub struct EngineStatus {
     pub last_check_latency_ms: Option<u64>,
     pub failure_streak: usize,
     pub switch_count: u64,
+    pub standby_count: usize,
+    pub standby_scanning: bool,
 }
 
 #[derive(Default)]
@@ -213,6 +215,8 @@ impl EngineMetrics {
             last_check_latency_ms: if last_check == 0 { None } else { Some(last_latency) },
             failure_streak: self.failure_streak.load(Ordering::Relaxed),
             switch_count: self.switch_count.load(Ordering::Relaxed),
+            standby_count: crate::warm_standby::standby_count(),
+            standby_scanning: crate::warm_standby::is_scanning(),
         }
     }
 }
@@ -817,8 +821,8 @@ async fn handle_client(
 
     metrics.active_connections.fetch_sub(1, Ordering::Relaxed);
     if let Err(error) = result {
-                                                                             
-                                                                       
+        // A disconnected Telegram session is normal; expose only the current
+        // actionable failure and never log secrets or full proxy URLs.
         metrics.failed_connections.fetch_add(1, Ordering::Relaxed);
         metrics.set_error(error);
     }
@@ -871,11 +875,17 @@ async fn find_failover_candidate(
         !excluded_ids.contains(&record.id) &&
             crate::proxy::is_supported_profile_record(record)
     });
+    let ru = crate::ru_health::cached(app);
     records.sort_by(|left, right| {
-        right.source_tier.as_deref().unwrap_or("").cmp(left.source_tier.as_deref().unwrap_or(""))
+        ru.contains_key(&right.id).cmp(&ru.contains_key(&left.id))
+            .then_with(|| right.source_tier.as_deref().unwrap_or("").cmp(left.source_tier.as_deref().unwrap_or("")))
             .then_with(|| right.uptime.unwrap_or(0.0).total_cmp(&left.uptime.unwrap_or(0.0)))
             .then_with(|| left.rtt_ms.unwrap_or(u64::MAX).cmp(&right.rtt_ms.unwrap_or(u64::MAX)))
     });
+
+    if let Some(candidate) = crate::warm_standby::verified_backup(&records, excluded_ids).await {
+        return Ok(Some(candidate));
+    }
 
     let semaphore = Arc::new(tokio::sync::Semaphore::new(FAILOVER_PARALLELISM));
     let mut probes = FuturesUnordered::new();
@@ -897,7 +907,7 @@ async fn find_failover_candidate(
             available.push(candidate);
         }
     }
-    available.sort_by_key(|(_, latency)| *latency);
+    available.sort_by_key(|(record, latency)| crate::ru_health::scored_local_latency(*latency, ru.contains_key(&record.id)));
     available.truncate(FAILOVER_FINALISTS);
 
     let mut verified = Vec::new();
@@ -921,7 +931,7 @@ async fn find_failover_candidate(
         }
     }
 
-    verified.sort_by_key(|(_, latency)| *latency);
+    verified.sort_by_key(|(record, latency)| crate::ru_health::scored_local_latency(*latency, ru.contains_key(&record.id)));
     Ok(verified.into_iter().next())
 }
 
@@ -936,6 +946,7 @@ async fn monitor_selected_upstream(
     let mut next_switch_attempt_at = 0u64;
     let mut last_catalog_refresh_at = 0u64;
     let mut last_optimization_at = 0u64;
+    let mut last_warm_scan_at = 0u64;
 
     loop {
         let settings = crate::settings::load(&app).unwrap_or_default();
@@ -970,12 +981,26 @@ async fn monitor_selected_upstream(
                 metrics.record_probe(latency, if healthy { 0 } else { consecutive_failures + 1 });
 
                 if healthy {
+                    // Keep three or more fresh reserves while leaving Telegram on
+                    // the current upstream. Never route on stale in-memory proofs.
+                    if now.saturating_sub(last_warm_scan_at) >= 5 * 60_000
+                        && crate::warm_standby::standby_count() < 3
+                        && !crate::warm_standby::is_scanning()
+                    {
+                        last_warm_scan_at = now;
+                        let ru_ids = crate::ru_health::cached(&app).into_keys().collect();
+                        crate::warm_standby::start_scan(
+                            crate::proxy::cached_records(&app).unwrap_or_default(),
+                            active.id.clone(),
+                            ru_ids,
+                        );
+                    }
                     consecutive_failures = 0;
                     metrics.failure_streak.store(0, Ordering::Relaxed);
                     metrics.set_route(&format!("{} · upstream rechecked", active.label()));
 
-                                                                                   
-                                                                                
+                    // Only auto-managed catalogue profiles participate in periodic
+                    // optimization. Manually named profiles are never replaced.
                     let auto_managed = crate::profiles::selected_profile(&app)
                         .ok()
                         .flatten()
@@ -984,6 +1009,7 @@ async fn monitor_selected_upstream(
                     let optimize_interval_ms = AUTO_OPTIMIZE_INTERVAL.as_millis() as u64;
                     if settings.auto_optimize_connection
                         && auto_managed
+                        && !crate::warm_standby::is_fast_pinned(&active.id)
                         && now.saturating_sub(last_optimization_at) >= optimize_interval_ms
                     {
                         last_optimization_at = now;
@@ -1105,8 +1131,8 @@ async fn connect_upstream(
     cf_domains: Arc<RwLock<Vec<String>>>,
     settings: &crate::settings::DesktopSettings,
 ) -> Result<(ConnectedUpstream, String), String> {
-                                                                            
-                                                                 
+    // A user-selected proxy is exclusive: do not silently route its session
+    // directly if the selected external upstream is unavailable.
     if let Some(profile) = selected {
         if profile.is_socks5() {
             let target = dc_ip(dc).ok_or_else(|| format!("No Telegram DC{dc} address is configured."))?;
@@ -1551,8 +1577,8 @@ fn decode_cf_domain(encoded: &str) -> Option<String> {
         if prefix.is_empty() || !prefix.chars().all(|c| c.is_ascii_lowercase()) {
             return None;
         }
-                                                                      
-                                                     
+        // Match the Android decoder: shift by the count of alphabetic
+        // characters before the encoded .com suffix.
         let shift = prefix.chars().filter(|c| c.is_ascii_alphabetic()).count() as i32;
         let decoded: String = prefix.chars().map(|character| {
             let index = character as i32 - 'a' as i32;

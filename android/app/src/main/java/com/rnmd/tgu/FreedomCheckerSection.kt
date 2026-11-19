@@ -103,7 +103,7 @@ fun FreedomCheckerSection() {
     }
 
     LaunchedEffect(repository) {
-                                                                                                
+        // Refresh on entry even when a cache exists; show cached records immediately meanwhile.
         refreshCatalog()
     }
 
@@ -363,6 +363,13 @@ private fun CatalogProxyCard(
                     Text(status, color = statusColor, fontSize = 9.sp)
                 }
                 Text(deviceLine, color = CatalogMuted, fontSize = 8.sp)
+                if (item.ruVerified) {
+                    Text(
+                        "RU Verified · Yandex Cloud " + (item.ruLatencyMs?.toString() ?: "—") +
+                            " мс · нужна проверка телефона",
+                        color = CatalogText, fontSize = 8.sp, lineHeight = 12.sp
+                    )
+                }
                 if (item.communityUniqueReporters >= 3 && item.communitySuccessRate != null) {
                     Text(
                         "Сообщество · ${item.communitySuccessRate}% успешно · ${item.communityUniqueReporters} устройств" +
