@@ -1,4 +1,5 @@
 mod engine;
+mod tray;
 mod proxy;
 mod ru_health;
 mod rnmd_id;
@@ -14,6 +15,8 @@ pub fn run() {
     tauri::Builder::default()
         .manage(engine::EngineState::default())
         .plugin(tauri_plugin_opener::init())
+        .setup(|app| tray::install(app))
+        .on_window_event(tray::on_window_event)
         .invoke_handler(tauri::generate_handler![
             proxy::catalog_load,
             proxy::catalog_refresh,

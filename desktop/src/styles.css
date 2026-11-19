@@ -239,3 +239,44 @@ html,body,#root{width:100%;height:100%;min-width:0;min-height:0;margin:0;overflo
 @media(max-width:1050px){.sidebar{width:76px;flex-basis:76px}.sidebar.expanded{width:224px;flex-basis:224px}}
 @media(max-width:760px){.rnmd-info-grid{grid-template-columns:1fr}.rnmd-panel{padding:17px}.topbar{padding:0 18px}}
 @media(prefers-reduced-motion:reduce){.sidebar{transition:none}.page{scroll-behavior:auto}}
+
+
+
+/* RNMD / TGU Desktop v0.4.2 custom Windows titlebar.  */
+.desktop-frame{width:100%;height:100vh;height:100dvh;overflow:hidden;display:flex;flex-direction:column;min-height:0;background:#080808}
+.desktop-frame>.app-shell{height:auto;flex:1 1 auto;min-height:0;width:100%;overflow:hidden}
+.window-titlebar{height:40px;min-height:40px;flex:0 0 40px;display:flex;align-items:stretch;justify-content:space-between;background:#171717;border-bottom:1px solid #303030;color:#eee;user-select:none;-webkit-user-select:none;position:relative;z-index:30}
+.titlebar-drag{display:flex;align-items:center;flex:1;min-width:0;padding:0 10px 0 13px;gap:11px;overflow:hidden;cursor:default}
+.titlebar-drag>span,.titlebar-drag img{pointer-events:none}
+.titlebar-brand{height:23px;width:23px;display:grid;place-items:center;flex:0 0 23px;border-radius:6px;background:#242424;border:1px solid #444;overflow:hidden}
+.titlebar-brand img{width:18px;height:18px;object-fit:contain}
+.titlebar-name{font-size:11px;font-weight:750;letter-spacing:.1em;display:flex;align-items:center;gap:7px;white-space:nowrap}
+.titlebar-name-secondary{font-size:10px;color:#b0b0b0;font-weight:500;letter-spacing:.075em}
+.titlebar-version{border:1px solid #414141;border-radius:4px;color:#aaa;font:9px "DM Mono",monospace;line-height:18px;height:19px;padding:0 6px;white-space:nowrap}
+.titlebar-divider{height:13px;width:1px;background:#424242}
+.titlebar-subtitle{font:9px "DM Mono",monospace;letter-spacing:.12em;color:#797979;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.window-controls{display:flex;height:100%;align-items:stretch;flex:0 0 auto}
+.window-control{width:46px;height:100%;border:0;border-left:1px solid transparent;background:transparent;color:#bcbcbc;padding:0;display:grid;place-items:center;cursor:pointer}
+.window-control:hover{background:#303030;color:#fff}
+.window-control:active{background:#3b3b3b}
+.window-control.close:hover{background:#d63333;color:#fff}
+.window-control.close:active{background:#a32323}
+.window-control:focus-visible,.account-indicator:focus-visible,.topbar-account:focus-visible{outline:2px solid #eee;outline-offset:-3px}
+.topbar{gap:16px}
+.topbar-right{gap:12px;min-width:0}
+.engine-indicator{display:inline-flex;align-items:center;gap:8px;padding:7px 10px;background:#151515;border:1px solid #292929;border-radius:7px;color:#888;white-space:nowrap;font:9px "DM Mono",monospace;letter-spacing:.045em}
+.engine-indicator .indicator-dot{height:6px;width:6px;border-radius:50%;background:#666}
+.engine-indicator.running{color:#bcbcbc;border-color:#434343}
+.engine-indicator.running .indicator-dot{background:#c1c1c1}
+.engine-indicator.online{color:#eee;border-color:#585858}
+.engine-indicator.online .indicator-dot{background:#f2f2f2;box-shadow:0 0 0 3px rgba(255,255,255,.07)}
+.account-indicator{border:1px solid #383838;border-radius:9px;padding:4px 5px 4px 11px;background:#151515;display:flex;align-items:center;gap:10px;color:#aaa;min-width:0;max-width:240px;text-align:left}
+.account-indicator:hover{background:#222;border-color:#777}
+.account-indicator.signed-in{border-color:#626262;color:#f0f0f0}
+.account-indicator-text{display:flex;flex-direction:column;min-width:0;gap:4px}
+.account-indicator-text strong{font:9px "DM Mono",monospace;letter-spacing:.075em;white-space:nowrap}
+.account-indicator-text small{font:10px Inter,sans-serif;color:#999;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+.account-indicator .topbar-account{flex:0 0 31px;width:31px;height:31px;border-radius:7px;pointer-events:none}
+@media(max-width:1050px){.titlebar-subtitle{display:none}.account-indicator{max-width:155px}.topbar{padding-left:22px;padding-right:22px}}
+@media(max-width:900px){.breadcrumbs{font-size:11px}.engine-indicator{font-size:8px;padding:7px}.account-indicator-text small{max-width:82px}}
+@media(prefers-reduced-motion:reduce){.window-control,.account-indicator{transition:none}}

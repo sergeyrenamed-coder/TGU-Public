@@ -1,13 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { getVersion } from "@tauri-apps/api/app";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import { listen } from "@tauri-apps/api/event";
 import {
   Activity, Bookmark, CheckCircle2, ChevronRight, CircleHelp,
   ExternalLink, Globe2, Heart, History, LayoutDashboard, LoaderCircle,
   Network, Plus, Power, RefreshCw, Save, Search, Server, Settings,
   ShieldCheck, SlidersHorizontal, Star, Trash2, Wifi, X, XCircle,
-  PanelLeftClose, PanelLeftOpen, UserRound, LogOut
+  PanelLeftClose, PanelLeftOpen, UserRound, LogOut, Minus, Square
 } from "lucide-react";
 
 type Section = "overview" | "catalog" | "selector" | "profiles" | "diagnostics" | "favorites" | "history" | "settings" | "account" | "about";
@@ -182,7 +183,7 @@ const initialStatus: EngineStatus = {
 function App() {
   const [section, setSection] = useState<Section>("overview");
   const [sidebarExpanded, setSidebarExpanded] = useState(false);
-  const [appVersion, setAppVersion] = useState("0.4.0");
+  const [appVersion, setAppVersion] = useState("0.4.2");
   const [rnmdAccount, setRnmdAccount] = useState<RnmdAccount | null>(null);
   const [rnmdBusy, setRnmdBusy] = useState(false);
   const [rnmdLoading, setRnmdLoading] = useState(true);
@@ -734,7 +735,22 @@ function App() {
   }, [catalog, search, typeFilter, statusFilter, testResults]);
   const visibleProxies = filteredProxies.slice(0, visibleCount);
 
-  return <div className="app-shell">
+  return <div className="desktop-frame">
+    <header className="window-titlebar" role="banner">
+      <div className="titlebar-drag" data-tauri-drag-region aria-label="Переместить окно TGU Desktop">
+        <span className="titlebar-brand" aria-hidden="true"><img src="/tgu-icon.svg" alt=""/></span>
+        <span className="titlebar-name" aria-hidden="true">TGU<span className="titlebar-name-secondary">DESKTOP</span></span>
+        <span className="titlebar-version" aria-hidden="true">v{appVersion}</span>
+        <span className="titlebar-divider" aria-hidden="true"/>
+        <span className="titlebar-subtitle" aria-hidden="true">RNMDTEAM / SECURE CONNECTIVITY</span>
+      </div>
+      <div className="window-controls" role="group" aria-label="Управление окном">
+        <button type="button" className="window-control" aria-label="Свернуть окно" title="Свернуть" onClick={() => void getCurrentWindow().minimize().catch(() => setNotice({kind:"error",text:"Не удалось свернуть окно."}))}><Minus size={15}/></button>
+        <button type="button" className="window-control" aria-label="Развернуть или восстановить окно" title="Развернуть / восстановить" onClick={() => void getCurrentWindow().toggleMaximize().catch(() => setNotice({kind:"error",text:"Не удалось изменить размер окна."}))}><Square size={13}/></button>
+        <button type="button" className="window-control close" aria-label="Свернуть TGU в системный трей" title="Скрыть в трей — TGU продолжит работать" onClick={() => void getCurrentWindow().close().catch(() => setNotice({kind:"error",text:"Не удалось закрыть окно."}))}><X size={17}/></button>
+      </div>
+    </header>
+    <div className="app-shell">
     <aside className={sidebarExpanded ? "sidebar expanded" : "sidebar collapsed"} aria-label="Навигация TGU">
       <div className="sidebar-head">
         <div className="brand"><img className="brand-mark" src="/tgu-icon.svg" alt="TGU"/><div className="brand-caption"><b>TGU</b><span>DESKTOP</span></div></div>
@@ -763,10 +779,25 @@ function App() {
       </div>
     </aside>
     <main className="main">
-      <header className="topbar"><div className="breadcrumbs">TGU Desktop <ChevronRight size={13}/><span>{title}</span></div><div className="topbar-right"><span className="local-label"><span/> ЛОКАЛЬНЫЙ РЕЖИМ</span>
-        <button type="button" className="topbar-account" onClick={() => setSection("account")} title={rnmdAccount ? "Открыть RNMD ID" : "Войти в RNMD ID"} aria-label="Профиль RNMD ID">
-          {rnmdAccount?.avatar_url ? <img src={rnmdAccount.avatar_url} alt="" referrerPolicy="no-referrer"/> : <UserRound size={16}/>}
-        </button></div></header>
+      <header className="topbar">
+        <div className="breadcrumbs">TGU Desktop <ChevronRight size={13}/><span>{title}</span></div>
+        <div className="topbar-right">
+          <div className={status.upstream_healthy ? "engine-indicator online" : status.engine_ready ? "engine-indicator running" : "engine-indicator"} title="Состояние локального прокси TGU, независимо от RNMD ID">
+            <span className="indicator-dot" aria-hidden="true"/>
+            <span>{status.upstream_healthy ? "ПРОКСИ РАБОТАЕТ" : status.engine_ready ? "TGU ЗАПУЩЕН" : "TGU ОСТАНОВЛЕН"}</span>
+          </div>
+          <button type="button" className={rnmdAccount ? "account-indicator signed-in" : "account-indicator"} onClick={() => setSection("account")}
+            title={rnmdAccount ? "Открыть профиль RNMD ID" : "Войти в RNMD ID"} aria-label={rnmdAccount ? "RNMD ID: аккаунт подключён, открыть профиль" : "RNMD ID: вход не выполнен"}>
+            <span className="account-indicator-text">
+              <strong>{rnmdLoading ? "RNMD ID" : rnmdAccount ? "RNMD ID · ВОШЁЛ" : "RNMD ID · ГОСТЬ"}</strong>
+              {rnmdAccount && <small>{rnmdAccount.telegram_username ? `@${rnmdAccount.telegram_username}` : rnmdAccount.display_name}</small>}
+            </span>
+            <span className="topbar-account">
+              {rnmdAccount?.avatar_url ? <img src={rnmdAccount.avatar_url} alt="" referrerPolicy="no-referrer"/> : <UserRound size={16}/>}
+            </span>
+          </button>
+        </div>
+      </header>
       <div className="page">
         {section === "overview" ? <>
           <div className="page-heading"><div><div className="eyebrow">ПАНЕЛЬ УПРАВЛЕНИЯ</div><h1>Обзор</h1><p>Локальный MTProto relay и внешний маршрут Telegram.</p></div><button className="icon-button" title="Обновить состояние" onClick={() => void refreshStatus()}><RefreshCw size={17} className={checking ? "spin" : ""}/></button></div>
@@ -1122,7 +1153,7 @@ function App() {
         </section>}
       </div>
     </main>
-  </div>;
+  </div></div>;
 }
 
 export default App;
